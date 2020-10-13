@@ -11,6 +11,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.dv8tion.jda.core.entities.Guild;
@@ -22,6 +24,8 @@ import net.dv8tion.jda.core.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.core.events.message.priv.PrivateMessageReceivedEvent;
 import net.dv8tion.jda.core.hooks.ListenerAdapter;
 import org.apache.commons.text.similarity.LevenshteinDistance;
+import org.joda.time.Instant;
+import org.joda.time.Interval;
 
 /**
  *
@@ -30,10 +34,15 @@ import org.apache.commons.text.similarity.LevenshteinDistance;
 public class GameListener extends ListenerAdapter {
 
     private final String prefix = "au+";
+    
+    private final int purgeIntervalInMinutes = 20;
+    private final int maximumInactiveTimeInMinutes = 20;
 
     private final List<GameRole> allRoles;
 
     private final Map<VoiceChannel, GameManager> gameDB;
+
+    private final Timer timer;
 
     /**
      * Enables debug messages
@@ -48,16 +57,59 @@ public class GameListener extends ListenerAdapter {
      */
     public GameListener(List<GameRole> allRoles, boolean debug) {
         super();
-        gameDB = new HashMap<>();
+
+        // Assign from arguments
         this.allRoles = allRoles;
         this.debug = debug;
+
+        // Create a new database
+        gameDB = new HashMap<>();
+
+        // Create a timer for purging the database of old 
+        timer = new Timer();
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "Started automatic gameDB purge");
+                
+                if (debug) {
+                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
+                }
+                
+                gameDB.values().removeIf(game -> game.isActive() && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L);
+                
+                if (debug) {
+                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
+                }
+            }
+        }, purgeIntervalInMinutes * 60000L);
     }
 
     public GameListener(GameListener gameListener) {
         super();
-        gameDB = new HashMap<>();
+
         this.allRoles = gameListener.allRoles;
         this.debug = gameListener.debug;
+
+        gameDB = new HashMap<>();
+
+        timer = new Timer();
+        timer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "Started automatic gameDB purge");
+                
+                if (debug) {
+                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
+                }
+                
+                gameDB.values().removeIf(game -> game.isActive() && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L);
+                
+                if (debug) {
+                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
+                }
+            }
+        }, purgeIntervalInMinutes * 60000L);
     }
 
     /**
@@ -347,6 +399,8 @@ public class GameListener extends ListenerAdapter {
 
         // Try to start game with given member list
         gameDB.put(vc, new GameManager(gameMembers, new ArrayList<>(rolesForThisGame)));
+
+        // Send a message to let the user know the game was created
         sourceMessage.addReaction("\u2705").queue();
         sendResponse(sourceMessage, "The players for this game are:\n" + playerList);
     }

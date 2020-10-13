@@ -6,6 +6,7 @@
 package com.hmnlg.amongusplus;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import net.dv8tion.jda.core.entities.User;
+import org.joda.time.Instant;
 
 /**
  * Used to manage and keep track of the status of an Among Us game
@@ -20,7 +22,7 @@ import net.dv8tion.jda.core.entities.User;
  * @author maikotui
  */
 public class GameManager {
-
+    
     /**
      * The main list of players and the roles that each player holds
      */
@@ -35,6 +37,8 @@ public class GameManager {
      * The current state of the game
      */
     private GameState state;
+    
+    private Instant stateChangeTime;
 
     // Flags to keep track of when an action is used (and only has one use)
     private boolean vetoUsed = false;
@@ -57,6 +61,15 @@ public class GameManager {
         this.gameRoles = usableNondefaultRoles;
 
         state = GameState.NEW;
+        stateChangeTime = new Instant();
+    }
+    
+    public boolean isActive() {
+        return state == GameState.ACTIVE;
+    }
+    
+    public Instant getLastGameStateChangeTime() {
+        return stateChangeTime;
     }
 
     /**
@@ -72,6 +85,7 @@ public class GameManager {
         }
 
         state = GameState.PREGAME;
+        stateChangeTime = new Instant();
     }
 
     /**
@@ -106,6 +120,7 @@ public class GameManager {
             System.out.println("Game started --- " + playerToRolesMap.toString());
 
             state = GameState.ACTIVE;
+            stateChangeTime = new Instant();
             return true;
         }
         throw new GeneralGameException("I'm not expecting a role assignment from you.");
@@ -133,6 +148,7 @@ public class GameManager {
         executionUsed = false;
         detectUsed = false;
         state = GameState.NEW;
+        stateChangeTime = new Instant();
     }
 
     public boolean useVeto() {
