@@ -34,7 +34,7 @@ import org.joda.time.Interval;
 public class GameListener extends ListenerAdapter {
 
     private final String prefix = "au+";
-    
+
     private final int purgeIntervalInMinutes = 20;
     private final int maximumInactiveTimeInMinutes = 20;
 
@@ -67,22 +67,35 @@ public class GameListener extends ListenerAdapter {
 
         // Create a timer for purging the database of old 
         timer = new Timer();
-        timer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "Started automatic gameDB purge");
-                
-                if (debug) {
-                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
-                }
-                
-                gameDB.values().removeIf(game -> game.isActive() && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L);
-                
-                if (debug) {
-                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
-                }
-            }
-        }, purgeIntervalInMinutes * 60000L);
+        timer.scheduleAtFixedRate(new DeletionTask(this), purgeIntervalInMinutes * 60000L, purgeIntervalInMinutes * 60000L);
+    }
+
+    class DeletionTask extends TimerTask {
+
+        private final GameListener gl;
+
+        public DeletionTask(GameListener gameListener) {
+            gl = gameListener;
+        }
+
+        @Override
+        public void run() {
+            gl.purgeDatabase();
+        }
+    }
+
+    private void purgeDatabase() {
+        Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "Started automatic gameDB purge");
+
+        if (debug) {
+            Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
+        }
+
+        gameDB.values().removeIf(game -> !game.isActive() && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L);
+
+        if (debug) {
+            Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
+        }
     }
 
     public GameListener(GameListener gameListener) {
@@ -98,13 +111,13 @@ public class GameListener extends ListenerAdapter {
             @Override
             public void run() {
                 Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "Started automatic gameDB purge");
-                
+
                 if (debug) {
                     Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
                 }
-                
+
                 gameDB.values().removeIf(game -> game.isActive() && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L);
-                
+
                 if (debug) {
                     Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
                 }
