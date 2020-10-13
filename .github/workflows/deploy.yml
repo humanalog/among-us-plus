@@ -29,11 +29,6 @@ jobs:
         restore-keys: ${{ runner.os }}-m2
     - name: Package with Maven
       run: mvn clean package
-  deploy:
-
-    runs-on: ubuntu-latest
-
-    steps:
     - name: Deploy to Heroku
       uses: akhileshns/heroku-deploy@v3.5.7
       with:
