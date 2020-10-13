@@ -52,7 +52,7 @@ public class Main {
             Map<Object, List<GameRole>> temp = yaml.load(in);
             roles = temp.get("roles");
         } catch (IOException ex) {
-            Logger.getLogger(Main.class.getName()).log(Level.SEVERE, "Error opening roles.yml", ex);
+            Logger.getLogger(Main.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
             return;
         }
 
