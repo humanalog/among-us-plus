@@ -89,19 +89,20 @@ public class GameListener extends ListenerAdapter {
             // ----- ALWAYS ACTIVE COMMANDS -----
             // Ping Pong
             if (content.equals(prefix + "ping")) {
-                addReactionToMessage(event.getMessage(), "\uD83D\uDE04️️");
-                 Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "responded to ping");
+                event.getMessage().addReaction("\u2705").queue();
+                Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "responded to ping");
                 sendResponse(message, "Pong :)");
             }
 
             // Help Command
             if (content.equals(prefix + "help") || content.equals(prefix + "?")) {
+                event.getMessage().addReaction("\u2705").queue();
                 sendHelpInfo(event);
             }
 
             // List Roles
             if (content.equals(prefix + "roles")) {
-                addReactionToMessage(event.getMessage(), "👌️️");
+                event.getMessage().addReaction("\u2705").queue();
                 String roleInfo = "";
                 roleInfo = allRoles.stream().map(role -> role.name + "\n" + Arrays.toString(role.aliases) + "\n" + role.description + "\n\n").reduce(roleInfo, String::concat);
                 sendResponse(message, roleInfo);
@@ -301,7 +302,6 @@ public class GameListener extends ListenerAdapter {
     }
 
     private void sendHelpInfo(MessageReceivedEvent event) {
-        addReactionToMessage(event.getMessage(), "👌️️");
         String helpText = prefix + "ping - Ping Pong to make sure I'm awake.\n\n";
         helpText += prefix + "roles - Gives a list of roles that you can use in game.\n\n";
         helpText += prefix + "create - Creates a new game in the voice channel you are in. (Best in Among Us VC). Note: Everyone in that voice channel will be added. Use the role names or alias to add them into the game on creation.\n\n";
@@ -347,7 +347,7 @@ public class GameListener extends ListenerAdapter {
 
         // Try to start game with given member list
         gameDB.put(vc, new GameManager(gameMembers, new ArrayList<>(rolesForThisGame)));
-        addReactionToMessage(sourceMessage, "✔️️");
+        sourceMessage.addReaction("\u2705").queue();
         sendResponse(sourceMessage, "The players for this game are:\n" + playerList);
     }
 
@@ -360,7 +360,7 @@ public class GameListener extends ListenerAdapter {
         // Try to move to pregame.
         try {
             game.moveToPregame();
-            addReactionToMessage(sourceMessage, "👌️️");
+            sourceMessage.addReaction("\u2705").queue();
             sendResponse(sourceMessage, "Game is started and is waiting for everyone to ready up. Everyone playing should ready up by messaging me whether they are an imposter or crewmate. Message me 'ready [role]'.");
         } catch (GeneralGameException err) {
             sendErrorResponse(sourceMessage, err.getMessage());
@@ -565,17 +565,7 @@ public class GameListener extends ListenerAdapter {
      * @param message
      */
     private void sendErrorResponse(Message receivedMessage, String message) {
-        addReactionToMessage(receivedMessage, "⚠️");
+        receivedMessage.addReaction("⚠️").queue();
         receivedMessage.getChannel().sendMessage(message).queue();
-    }
-
-    /**
-     * Adds a reaction to the given message.
-     *
-     * @param message
-     * @param reaction
-     */
-    private void addReactionToMessage(Message message, String reaction) {
-        message.addReaction(reaction).queue();
     }
 }
