@@ -28,32 +28,55 @@ import org.joda.time.Instant;
 import org.joda.time.Interval;
 
 /**
+ * A ListenerAdapter for a JDA object that listens for game commands.
  *
  * @author maikotui
  */
 public class GameListener extends ListenerAdapter {
 
+    /**
+     * Prefix that must be used for commands to be recognized
+     */
     private final String prefix = "au+";
 
-    private final int purgeIntervalInMinutes = 20;
-    private final int maximumInactiveTimeInMinutes = 20;
-
+    /**
+     * A list of all the roles that this GameListener will listen for
+     */
     private final List<GameRole> allRoles;
 
+    /**
+     * The database of all created games. This will be purged periodically (see
+     * purgeIntervalInMinutes)
+     */
     private final Map<VoiceChannel, GameManager> gameDB;
 
-    private final Timer timer;
+    /**
+     * The timer that will run the purge command
+     */
+    private final Timer purgeTimer;
 
     /**
-     * Enables debug messages
+     * The amount of time in minutes between each purge of the database
+     */
+    private final int purgeIntervalInMinutes = 20;
+
+    /**
+     * The amount of time in minutes since a state change for a game to be
+     * purged from the database
+     */
+    private final int maximumInactiveTimeInMinutes = 20;
+
+    /**
+     * Toggle for debug mode
      */
     private boolean debug;
 
     /**
-     * Initializes a new listener for game commands
+     * Initializes a new listener for game commands. This will also start the
+     * listener's database purge timer.
      *
-     * @param allRoles
-     * @param debug
+     * @param allRoles A list of all the roles this GameListener accepts
+     * @param debug Whether to start the GameListener in debug mode or not
      */
     public GameListener(List<GameRole> allRoles, boolean debug) {
         super();
@@ -66,63 +89,33 @@ public class GameListener extends ListenerAdapter {
         gameDB = new HashMap<>();
 
         // Create a timer for purging the database of old 
-        timer = new Timer();
-        timer.scheduleAtFixedRate(new DeletionTask(this), purgeIntervalInMinutes * 60000L, purgeIntervalInMinutes * 60000L);
+        purgeTimer = new Timer();
+        purgeTimer.scheduleAtFixedRate(new PurgeTimerTask(this), purgeIntervalInMinutes * 60000L, purgeIntervalInMinutes * 60000L);
     }
 
-    class DeletionTask extends TimerTask {
-
-        private final GameListener gl;
-
-        public DeletionTask(GameListener gameListener) {
-            gl = gameListener;
-        }
-
-        @Override
-        public void run() {
-            gl.purgeDatabase();
-        }
-    }
-
-    private void purgeDatabase() {
-        Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "Started automatic gameDB purge");
-
-        if (debug) {
-            Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
-        }
-
-        gameDB.values().removeIf(game -> !game.isActive() && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L);
-
-        if (debug) {
-            Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
-        }
-    }
-
+    /**
+     * Creates a new GameListener with the same roles and debug state as the
+     * previous. The game database will be empty and a new timer for database
+     * purging will be created and started.
+     *
+     * @param gameListener The game listener to inherit values from
+     */
     public GameListener(GameListener gameListener) {
         super();
 
+        // Assign from arguments
         this.allRoles = gameListener.allRoles;
         this.debug = gameListener.debug;
 
+        // Create a new database
         gameDB = new HashMap<>();
 
-        timer = new Timer();
-        timer.schedule(new TimerTask() {
-            @Override
-            public void run() {
-                Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "Started automatic gameDB purge");
+        // Stop old timer from running
+        gameListener.purgeTimer.cancel();
 
-                if (debug) {
-                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
-                }
-
-                gameDB.values().removeIf(game -> game.isActive() && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L);
-
-                if (debug) {
-                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
-                }
-            }
-        }, purgeIntervalInMinutes * 60000L);
+        // Create a timer for purging the database of old 
+        purgeTimer = new Timer();
+        purgeTimer.scheduleAtFixedRate(new PurgeTimerTask(this), purgeIntervalInMinutes * 60000L, purgeIntervalInMinutes * 60000L);
     }
 
     /**
@@ -130,21 +123,26 @@ public class GameListener extends ListenerAdapter {
      *
      * @return returns the value of debug after toggle
      */
-    public boolean debugToggle() {
+    public boolean toggleDebug() {
         debug = !debug;
         return debug;
     }
 
     /**
+     * Ran every time a message is received (excludes private messages). This
+     * will look for the GameListener prefix and if it is present, parse the
+     * given command.
      *
-     * @param event
+     * @param event Information regarding the message received
      */
     @Override
     public void onMessageReceived(MessageReceivedEvent event) {
+        // Ignore bots
         if (event.getAuthor().isBot()) {
             return;
         }
 
+        // Get and store message and text content (used to simplify calls
         Message message = event.getMessage();
         String content = message.getContentRaw();
 
@@ -154,23 +152,37 @@ public class GameListener extends ListenerAdapter {
             // ----- ALWAYS ACTIVE COMMANDS -----
             // Ping Pong
             if (content.equals(prefix + "ping")) {
-                event.getMessage().addReaction("\u2705").queue();
-                Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "responded to ping");
+                message.addReaction("\u2705").queue();
                 sendResponse(message, "Pong :)");
+                if (debug) {
+                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Responded to ping from %s", message.getAuthor().getName()));
+                }
             }
 
             // Help Command
             if (content.equals(prefix + "help") || content.equals(prefix + "?")) {
-                event.getMessage().addReaction("\u2705").queue();
-                sendHelpInfo(event);
+                String helpText = prefix + "ping - Ping Pong to make sure I'm awake.\n\n";
+                helpText += prefix + "roles - Gives a list of roles that you can use in game.\n\n";
+                helpText += prefix + "create - Creates a new game in the voice channel you are in. (Best in Among Us VC). Note: Everyone in that voice channel will be added. Use the role names or alias to add them into the game on creation.\n\n";
+                helpText += prefix + "start - Starts the game. After this command is issued, everyone playing should message the bot to ready up.\n\n";
+                helpText += prefix + "restart - At the end of the round, use this command to restart the game. Everyone will have to ready up with their role again.\n\n";
+                helpText += prefix + "stop - If you are done playing among us, issue this command to stop the current game.";
+                message.addReaction("\u2705").queue();
+                sendResponse(message, helpText);
+                if (debug) {
+                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Responded to help command from %s", message.getAuthor().getName()));
+                }
             }
 
             // List Roles
             if (content.equals(prefix + "roles")) {
-                event.getMessage().addReaction("\u2705").queue();
                 String roleInfo = "";
                 roleInfo = allRoles.stream().map(role -> role.name + "\n" + Arrays.toString(role.aliases) + "\n" + role.description + "\n\n").reduce(roleInfo, String::concat);
+                message.addReaction("\u2705").queue();
                 sendResponse(message, roleInfo);
+                if (debug) {
+                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Responded to roles command from %s", message.getAuthor().getName()));
+                }
             }
 
             // ----- GAME COMMANDS ----
@@ -323,6 +335,11 @@ public class GameListener extends ListenerAdapter {
         }
     }
 
+    /**
+     * Ran every time a private message is received.
+     *
+     * @param event Information regarding the message received
+     */
     @Override
     public void onPrivateMessageReceived(PrivateMessageReceivedEvent event) {
         // Ready up message
@@ -366,6 +383,11 @@ public class GameListener extends ListenerAdapter {
         }
     }
 
+    /**
+     * Sends a list of commands and a description of them.
+     *
+     * @param event
+     */
     private void sendHelpInfo(MessageReceivedEvent event) {
         String helpText = prefix + "ping - Ping Pong to make sure I'm awake.\n\n";
         helpText += prefix + "roles - Gives a list of roles that you can use in game.\n\n";
@@ -535,6 +557,20 @@ public class GameListener extends ListenerAdapter {
         });
     }
 
+    private void purgeDatabase() {
+        Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "Started automatic gameDB purge");
+
+        if (debug) {
+            Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
+        }
+
+        gameDB.values().removeIf(game -> !game.isActive() && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L);
+
+        if (debug) {
+            Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
+        }
+    }
+
     private User findUserInGame(String query, GameManager game) {
         String playersName = query;
         int shortestDistance = Integer.MAX_VALUE;
@@ -634,5 +670,31 @@ public class GameListener extends ListenerAdapter {
     private void sendErrorResponse(Message receivedMessage, String message) {
         receivedMessage.addReaction("⚠️").queue();
         receivedMessage.getChannel().sendMessage(message).queue();
+    }
+
+    /**
+     * A TimerTask that will run the database purge command on the GameListener
+     * it was given
+     */
+    class PurgeTimerTask extends TimerTask {
+
+        /**
+         * Game Listener to purge
+         */
+        private final GameListener gl;
+
+        /**
+         * Stores the GameListener to use for purging when this command is ran.
+         *
+         * @param gameListener
+         */
+        public PurgeTimerTask(GameListener gameListener) {
+            gl = gameListener;
+        }
+
+        @Override
+        public void run() {
+            gl.purgeDatabase();
+        }
     }
 }

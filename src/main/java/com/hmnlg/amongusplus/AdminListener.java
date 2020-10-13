@@ -27,7 +27,7 @@ public class AdminListener extends ListenerAdapter {
     public void onPrivateMessageReceived(PrivateMessageReceivedEvent event) {
         if("258698313266626560".equals(event.getAuthor().getId())) {
             if(event.getMessage().getContentRaw().equalsIgnoreCase("au+debug")) {
-                if(currentGameListener.debugToggle()) {
+                if(currentGameListener.toggleDebug()) {
                     event.getMessage().getChannel().sendMessage("debug mode on").queue();
                 }
                 else {
