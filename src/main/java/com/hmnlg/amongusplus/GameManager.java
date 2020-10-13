@@ -205,6 +205,11 @@ public class GameManager {
     public List<GameRole> getRolesForPlayer(User player) {
         return playerToRolesMap.get(player);
     }
+    
+    @Override
+    public String toString() {
+        return String.format("State:[%s] Map:%s", state.toString(), playerToRolesMap.toString());
+    }
 }
 
 enum GameState {
