@@ -1,0 +1,70 @@
+roles:
+  - !!com.hmnlg.amongusplus.GameRole
+    id: 1
+    name: Crewmate
+    aliases:
+      - c
+      - crew
+    description: Crewmates complete their tasks and try to find any imposters.
+    isDefault: true
+    assignmentMessage: You are a crewmate, your job is to complete your tasks and find any imposters.
+    unstackableRoleIds: [2]
+  - !!com.hmnlg.amongusplus.GameRole
+    id: 2
+    name: Imposter
+    aliases:
+      - i
+      - killer
+    description: Imposters sabotage the crewmates and kill them before they are able to complete their tasks.
+    isDefault: true
+    assignmentMessage: You are an imposter, your job is to sabotage and kill crewmates before they complete their tasks.
+    unstackableRoleIds: [1]
+  - !!com.hmnlg.amongusplus.GameRole
+    id: 3
+    name: Veto-Holder
+    aliases:
+      - v
+      - veto
+      - vetoholder
+    description: Veto-holders are able to once a game force everyone to skip.
+    isDefault: false
+    assignmentMessage: You hold a veto. Once a game you are able to message me "veto" and I will force everyone who can to skip vote.
+    unstackableRoleIds: [3]
+  - !!com.hmnlg.amongusplus.GameRole
+    id: 4
+    name: Executioner
+    aliases:
+      - e
+      - ex
+    description: Executioners are able to force everyone to vote someone once a game.
+    isDefault: false
+    assignmentMessage: You are an executioner. Once a game you are able to message me "Execute [Player]" to force everyone to vote that player (replace "[Player]" with that players name).
+    unstackableRoleIds: []
+  - !!com.hmnlg.amongusplus.GameRole
+    id: 5
+    name: Troll
+    aliases:
+      - t
+    description: Trolls are crewmates who play against the crew. Their goal is to help the imposters win.
+    isDefault: false
+    assignmentMessage: You are a troll. Help the imposters win by any means necessary.
+    unstackableRoleIds: [2]
+  - !!com.hmnlg.amongusplus.GameRole
+    id: 6
+    name: Sacrifice
+    aliases:
+      - s
+      - sac
+    description: Sacrifices are players who win if they are voted off or killed.
+    isDefault: false
+    assignmentMessage: You are a sacrifice. Find a way to die to win.
+    unstackableRoleIds: []
+  - !!com.hmnlg.amongusplus.GameRole
+    id: 7
+    name: Detective
+    aliases:
+      - d
+    description: Detectives are able to ask me about one person's role. I will tell them if they are correct or not.
+    isDefault: false
+    assignmentMessage: You are a detective. Once a game you can message me "detect [playersDiscordName] [role]" and I will tell you if that player is the role you specified.
+    unstackableRoleIds: [2]
