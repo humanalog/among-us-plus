@@ -221,16 +221,16 @@ public class GameListener extends ListenerAdapter {
                 createGame(event.getMessage());
             }
 
-            // Start command
-            if (content.equals(prefix + "start")) {
-                GameManager game = findGameForUser(event.getAuthor());
-                if (game != null) {
-                    startGame(event.getMessage(), game);
-                } else {
-                    sendErrorResponse(event.getMessage(), "You are not in a game.");
-                }
-            }
-
+            // Start chas been moved to reaction
+//            // Start command
+//            if (content.equals(prefix + "start")) {
+//                GameManager game = findGameForUser(event.getAuthor());
+//                if (game != null) {
+//                    startGame(event.getMessage(), game);
+//                } else {
+//                    sendErrorResponse(event.getMessage(), "You are not in a game.");
+//                }
+//            }
             // Reset command
             if (content.equals(prefix + "reset")) {
                 GameManager game = findGameForUser(event.getAuthor());
@@ -342,8 +342,7 @@ public class GameListener extends ListenerAdapter {
         switch (game.getState()) {
             case NEW -> {
                 if (updateText.contains("\u2705")) { // Checkmark
-                    // TODO: Start game
-                    System.out.println("START THE GAME");
+                    startGame(game);
                 }
             }
             case PREGAME -> {
@@ -353,34 +352,8 @@ public class GameListener extends ListenerAdapter {
                 } else if (updateText.contains("\uD83C\uDDEE")) { // I
                     chosenRole = this.imposterRole;
                 }
-
-                if (chosenRole != null) {
-                    try {
-                        if (game.attemptGameStartWithRoleAssignment(updater, chosenRole)) {
-                            Map<User, List<GameRole>> roleMap = game.giveOutNondefaultRoles();
-
-                            // Send role assignment message for non default roles and send everyone a game starting message
-                            game.getAllPlayers().forEach(player -> {
-                                player.openPrivateChannel().queue((channel) -> {
-                                    game.getRolesForPlayer(player).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
-                                        channel.sendMessage(role.assignmentMessage).queue(); // TODO: Move to embed instead of messaging
-                                    });
-                                });
-                            });
-
-                            // TODO: Update embed message to show that the game has been started
-                            // Send a debug message
-                            if (debug) {
-                                Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
-                            }
-                        } else {
-                            // TODO: Update embed message to show player joined
-                        }
-                    } catch (GeneralGameException ex) {
-                        Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
-                        return;
-                    }
-                }
+                
+                readyUp(updater, chosenRole, game);
             }
             case ACTIVE -> {
             }
@@ -396,15 +369,16 @@ public class GameListener extends ListenerAdapter {
      */
     @Override
     public void onPrivateMessageReceived(PrivateMessageReceivedEvent event) {
-        // Ready up message
-        if (event.getMessage().getContentRaw().startsWith("ready")) {
-            GameManager game = findGameForUser(event.getAuthor());
-            if (game != null) {
-                readyUp(event.getMessage(), game);
-            } else {
-                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
-            }
-        }
+        // Ready up moved to embed reaction
+//        // Ready up message
+//        if (event.getMessage().getContentRaw().startsWith("ready")) {
+//            GameManager game = findGameForUser(event.getAuthor());
+//            if (game != null) {
+//                readyUp(event.getMessage(), game);
+//            } else {
+//                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
+//            }
+//        }
 
         // Veto command
         if (event.getMessage().getContentRaw().startsWith("veto")) {
@@ -505,7 +479,7 @@ public class GameListener extends ListenerAdapter {
             game.displayMessge = message;
 
             gameDB.put(sourceMessage.getAuthor(), game);
-            
+
             message.addReaction("\u2705").queue(); //Checkmark
         });
 
@@ -518,68 +492,65 @@ public class GameListener extends ListenerAdapter {
      *
      * @param event
      */
-    private void startGame(Message sourceMessage, GameManager game) {
+    private void startGame(GameManager game) {
         // Try to move to pregame.
         try {
             game.moveToPregame();
 
-            EmbedBuilder eb = new EmbedBuilder();
-            eb.setColor(Color.red);
-            eb.setTitle("Game Title");
-            eb.addField("Choose Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
-            eb.setFooter("Created by humanalog#2515", sourceMessage.getJDA().getSelfUser().getAvatarUrl());
-            eb.setThumbnail(sourceMessage.getJDA().getSelfUser().getAvatarUrl());
-            sourceMessage.getChannel().sendMessage(eb.build()).queue((message) -> {
-                message.addReaction("\uD83C\uDDE8").queue(); // C
-                message.addReaction("\uD83C\uDDEE").queue(); // I
-            });
-            sourceMessage.addReaction("\u2705").queue();
+            // Update the game message
+            List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+            if (!gameMessageEmbeds.isEmpty()) {
+                MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+                EmbedBuilder eb = new EmbedBuilder();
+                eb.setColor(Color.red);
+                eb.setTitle(originalEmbed.getTitle());
+                eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                eb.addField(originalEmbed.getFields().get(0));
+                eb.addField(originalEmbed.getFields().get(1));
+                eb.addField("Choose Your Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
+
+                eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+                game.displayMessge.editMessage(eb.build()).queue((message) -> {
+                    message.addReaction("\uD83C\uDDE8").queue(); // C
+                    message.addReaction("\uD83C\uDDEE").queue(); // I
+                });
+            }
+
         } catch (GeneralGameException err) {
-            sendErrorResponse(sourceMessage, err.getMessage());
+            // TODO: Do something if an error occurs
+            Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, err.getMessage(), err);
         }
     }
 
-    private void readyUp(Message sourceMessage, GameManager game) {
-        String[] postCommandArgs = sourceMessage.getContentRaw().substring(("ready").length() + 1).split(" ");
-        if (postCommandArgs.length > 0) {
-            GameRole readyRole = findRoleFromString(postCommandArgs[0]);
-            if (readyRole != null) {
-                try {
-                    if (game.attemptGameStartWithRoleAssignment(sourceMessage.getAuthor(), readyRole)) {
-                        // Everyone is ready, time to start the game.
-                        try {
+    private void readyUp(User user, GameRole chosenRole, GameManager game) {
+        if (chosenRole != null) {
+                    try {
+                        if (game.attemptGameStartWithRoleAssignment(user, chosenRole)) {
                             Map<User, List<GameRole>> roleMap = game.giveOutNondefaultRoles();
 
                             // Send role assignment message for non default roles and send everyone a game starting message
                             game.getAllPlayers().forEach(player -> {
                                 player.openPrivateChannel().queue((channel) -> {
                                     game.getRolesForPlayer(player).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
-                                        channel.sendMessage(role.assignmentMessage).queue();
+                                        channel.sendMessage(role.assignmentMessage).queue(); // TODO: Move to embed instead of messaging
                                     });
-                                    channel.sendMessage("Everyone's in! Game is starting.").queue();
                                 });
                             });
 
+                            // TODO: Update embed message to show that the game has been started
                             // Send a debug message
                             if (debug) {
                                 Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
                             }
-                        } catch (GeneralGameException err) {
-                            sendErrorResponse(sourceMessage, err.getMessage());
-                            Logger.getLogger(GameListener.class.getName()).log(Level.WARNING, err.getMessage());
+                        } else {
+                            // TODO: Update embed message to show player joined
                         }
-                    } else {
-                        sourceMessage.getChannel().sendMessage("You're in. Waiting on others to ready up.").queue();
+                    } catch (GeneralGameException ex) {
+                        Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
+                        // TODO: do something when error occurs
                     }
-                } catch (GeneralGameException err) {
-                    sourceMessage.getChannel().sendMessage(err.getMessage()).queue();
                 }
-            } else {
-                sourceMessage.getChannel().sendMessage("Could not identify the '" + postCommandArgs[0] + "' role.").queue();
-            }
-        } else {
-            sourceMessage.getChannel().sendMessage("Please give the role you are readying up as (use 'ready [role]').").queue();
-        }
     }
 
     private void useVeto(Message sourceMessage, GameManager game) {
