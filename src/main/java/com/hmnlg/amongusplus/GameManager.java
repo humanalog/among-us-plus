@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import net.dv8tion.jda.core.entities.MessageEmbed;
+import net.dv8tion.jda.core.entities.Message;
 import net.dv8tion.jda.core.entities.User;
 import org.joda.time.Instant;
 
@@ -23,7 +23,7 @@ import org.joda.time.Instant;
  */
 public class GameManager {
     
-    public MessageEmbed message;
+    public Message displayMessge;
     
     /**
      * The main list of players and the roles that each player holds
@@ -38,7 +38,7 @@ public class GameManager {
     /**
      * The current state of the game
      */
-    private GameState state;
+    private GameState state = GameState.NEW;
 
     private Instant stateChangeTime;
 
