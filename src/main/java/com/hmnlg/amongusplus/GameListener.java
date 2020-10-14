@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.logging.Level;
@@ -221,52 +222,8 @@ public class GameListener extends ListenerAdapter {
                 createGame(event.getMessage());
             }
 
-            // Start chas been moved to reaction
-//            // Start command
-//            if (content.equals(prefix + "start")) {
-//                GameManager game = findGameForUser(event.getAuthor());
-//                if (game != null) {
-//                    startGame(event.getMessage(), game);
-//                } else {
-//                    sendErrorResponse(event.getMessage(), "You are not in a game.");
-//                }
-//            }
-            // Reset command
-//            if (content.equals(prefix + "reset")) {
-//                GameManager game = findGameForUser(event.getAuthor());
-//                if (game != null) {
-//                    game.resetGame();
-//                    sendResponse(event.getMessage(), "Game has been reset.");
-//                } else {
-//                    sendErrorResponse(event.getMessage(), "You are not in a game.");
-//                }
-//            }
             if (content.equals(prefix + "stop")) {
-                GameManager gameToRemove = gameDB.get(event.getAuthor());
-                if (gameToRemove != null) {
-                    if (gameToRemove.displayMessge != null) {
-                        List<MessageEmbed> gameMessageEmbeds = gameToRemove.displayMessge.getEmbeds();
-                        if (!gameMessageEmbeds.isEmpty()) {
-                            MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
-
-                            EmbedBuilder eb = new EmbedBuilder();
-                            eb.setColor(Color.RED);
-                            eb.setTitle(originalEmbed.getTitle());
-                            eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
-
-                            eb.addField("Game is over", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
-
-                            eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
-
-                            gameToRemove.displayMessge.editMessage(eb.build()).queue();
-                        }
-                    }
-
-                    // Remove game from database
-                    gameDB.remove(event.getAuthor());
-                } else {
-                    sendErrorResponse(event.getMessage(), "You are not in a game.");
-                }
+                tryDeleteUsersGame(event.getAuthor());
             }
 
             if (content.startsWith(prefix + "padd")) {
@@ -438,12 +395,45 @@ public class GameListener extends ListenerAdapter {
                 if (updateText.contains("\uD83D\uDD04")) { // Restart command
                     game.resetGame();
                 } else if (updateText.contains("\uD83D\uDED1")) { // Stop command
-
+                    tryDeleteUsersGame(updater);
                 }
             }
             default -> {
             }
         }
+    }
+
+    private boolean tryDeleteUsersGame(User user) {
+        GameManager game = gameDB.get(user);
+        if (game == null) {
+            return false;
+        }
+        
+        // Update the display message if the game has it
+        if (game.displayMessge != null) {
+            game.displayMessge.clearReactions().queue((obj) -> {
+                List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+            if (!gameMessageEmbeds.isEmpty()) {
+                MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+
+                EmbedBuilder eb = new EmbedBuilder();
+                eb.setColor(Color.RED);
+                eb.setTitle(originalEmbed.getTitle());
+                eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                eb.addField("Game has been stopped.", "Thanks for playing!", false);
+
+                eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                game.displayMessge.editMessage(eb.build()).queue();
+            }
+            });
+        }
+
+        // Remove game from database
+        gameDB.remove(user);
+        
+        return true;
     }
 
     /**
@@ -798,8 +788,17 @@ public class GameListener extends ListenerAdapter {
         if (debug) {
             Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
         }
-
-        gameDB.values().removeIf(game -> game.getState() != GameState.ACTIVE && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L);
+        
+        List<User> gameOwners = new ArrayList<>(gameDB.keySet());
+        gameOwners.forEach(gameOwner -> {
+            GameManager game = gameDB.get(gameOwner);
+            if (game.getState() != GameState.ACTIVE && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L) {
+                tryDeleteUsersGame(gameOwner);
+                gameOwner.openPrivateChannel().queue((channel) -> {
+                    channel.sendMessage("Your Among Us+ game has been inactive for longer than 20 minutes. It has been automatically stopped.").queue();
+                });
+            }
+        });
 
         if (debug) {
             Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
