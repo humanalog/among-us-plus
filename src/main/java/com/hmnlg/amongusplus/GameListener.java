@@ -506,8 +506,31 @@ public class GameListener extends ListenerAdapter {
                 eb.setTitle(originalEmbed.getTitle());
                 eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
 
-                eb.addField(originalEmbed.getFields().get(0));
-                eb.addField(originalEmbed.getFields().get(1));
+                // Print not ready users
+                List<User> usersNotReady = game.getPlayersWithoutRoles();
+                StringBuilder sb = new StringBuilder();
+                if (!usersNotReady.isEmpty()) {
+                    sb.append(">>> ");
+                }
+                for (User user : usersNotReady) {
+                    sb.append(user.getAsMention()).append("\n");
+                }
+                eb.addField("Not Ready", sb.toString(), true);
+
+                // Get ready users
+                List<User> readyUsers = game.getAllPlayers();
+                readyUsers.removeAll(usersNotReady);
+
+                // Print out ready
+                sb = new StringBuilder();
+                if (!readyUsers.isEmpty()) {
+                    sb.append(">>> ");
+                }
+                for (User user : readyUsers) {
+                    sb.append(user.getAsMention()).append("\n");
+                }
+                eb.addField("Ready", sb.toString(), true);
+
                 eb.addField("Choose Your Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
 
                 eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
@@ -528,6 +551,7 @@ public class GameListener extends ListenerAdapter {
         if (chosenRole != null) {
             try {
                 if (game.attemptGameStartWithRoleAssignment(user, chosenRole)) {
+
                     Map<User, List<GameRole>> roleMap = game.giveOutNondefaultRoles();
 
                     // Send role assignment message for non default roles and send everyone a game starting message
@@ -539,13 +563,75 @@ public class GameListener extends ListenerAdapter {
                         });
                     });
 
-                    // TODO: Update embed message to show that the game has been started
+                    // Update the game message
+                    game.displayMessge.clearReactions().queue((obj) -> {
+                        List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+                        if (!gameMessageEmbeds.isEmpty()) {
+                            MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+                            EmbedBuilder eb = new EmbedBuilder();
+                            eb.setColor(Color.red);
+                            eb.setTitle(originalEmbed.getTitle());
+                            eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                            eb.addField(originalEmbed.getFields().get(0));
+                            eb.addField(originalEmbed.getFields().get(1));
+                            eb.addField("What's Next?", "Choose \uD83D\uDD04 to restart the game.\nChoose \uD83D\uDED1 to stop the game.", false);
+
+                            eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                            game.displayMessge.editMessage(eb.build()).queue((message) -> {
+                                message.addReaction("\uD83D\uDD04").queue(); // Redo
+                                message.addReaction("\uD83D\uDED1").queue(); // Stop
+                            });
+                        }
+                    });
                     // Send a debug message
                     if (debug) {
                         Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
                     }
                 } else {
-                    // TODO: Update embed message to show player joined
+                    List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+                    if (!gameMessageEmbeds.isEmpty()) {
+                        MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+                        EmbedBuilder eb = new EmbedBuilder();
+                        eb.setColor(Color.red);
+                        eb.setTitle(originalEmbed.getTitle());
+                        eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                        // Print not ready users
+                        List<User> usersNotReady = game.getPlayersWithoutRoles();
+                        StringBuilder sb = new StringBuilder();
+                        if (!usersNotReady.isEmpty()) {
+                            sb.append(">>> ");
+                        }
+                        for (User notReadyUser : usersNotReady) {
+                            sb.append(notReadyUser.getAsMention()).append("\n");
+                        }
+                        eb.addField("Not Ready", sb.toString(), true);
+
+                        // Get ready users
+                        List<User> readyUsers = game.getAllPlayers();
+                        readyUsers.removeAll(usersNotReady);
+
+                        // Print out ready
+                        sb = new StringBuilder();
+                        if (!readyUsers.isEmpty()) {
+                            sb.append(">>> ");
+                        }
+                        for (User readyUser : readyUsers) {
+                            sb.append(readyUser.getAsMention()).append("\n");
+                        }
+                        eb.addField("Ready", sb.toString(), true);
+
+                        eb.addField("Choose Your Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
+
+                        eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                        game.displayMessge.editMessage(eb.build()).queue((message) -> {
+                            message.addReaction("\uD83C\uDDE8").queue(); // C
+                            message.addReaction("\uD83C\uDDEE").queue(); // I
+                        });
+                    }
                 }
             } catch (GeneralGameException ex) {
                 Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);

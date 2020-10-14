@@ -29,7 +29,7 @@ roles:
     description: Veto-holders are able to once a game force everyone to skip.
     isDefault: false
     assignmentMessage: You hold a veto. Once a game you are able to message me "veto" and I will force everyone who can to skip vote.
-    unstackableRoleIds: [3]
+    unstackableRoleIds: [2, 3, 4, 5, 6, 7]
   - !!com.hmnlg.amongusplus.GameRole
     id: 4
     name: Executioner
@@ -39,7 +39,7 @@ roles:
     description: Executioners are able to force everyone to vote someone once a game.
     isDefault: false
     assignmentMessage: You are an executioner. Once a game you are able to message me "Execute [Player]" to force everyone to vote that player (replace "[Player]" with that players name).
-    unstackableRoleIds: []
+    unstackableRoleIds: [2, 3, 4, 5, 6, 7]
   - !!com.hmnlg.amongusplus.GameRole
     id: 5
     name: Troll
@@ -48,7 +48,7 @@ roles:
     description: Trolls are crewmates who play against the crew. Their goal is to help the imposters win.
     isDefault: false
     assignmentMessage: You are a troll. Help the imposters win by any means necessary.
-    unstackableRoleIds: [2]
+    unstackableRoleIds: [2, 3, 4, 5, 6, 7]
   - !!com.hmnlg.amongusplus.GameRole
     id: 6
     name: Sacrifice
@@ -58,7 +58,7 @@ roles:
     description: Sacrifices are players who win if they are voted off or killed.
     isDefault: false
     assignmentMessage: You are a sacrifice. Find a way to die to win.
-    unstackableRoleIds: []
+    unstackableRoleIds: [2, 3, 4, 5, 6, 7]
   - !!com.hmnlg.amongusplus.GameRole
     id: 7
     name: Detective
@@ -67,4 +67,4 @@ roles:
     description: Detectives are able to ask me about one person's role. I will tell them if they are correct or not.
     isDefault: false
     assignmentMessage: You are a detective. Once a game you can message me "detect [playersDiscordName] [role]" and I will tell you if that player is the role you specified.
-    unstackableRoleIds: [2]
+    unstackableRoleIds: [2, 3, 4, 5, 6, 7]

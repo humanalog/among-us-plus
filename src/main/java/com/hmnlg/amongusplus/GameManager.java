@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
 import net.dv8tion.jda.core.entities.Message;
@@ -119,13 +120,21 @@ public class GameManager {
                 return false;
             }
 
-            System.out.println("Game started --- " + playerToRolesMap.toString());
-
             state = GameState.ACTIVE;
             stateChangeTime = new Instant();
             return true;
         }
         throw new GeneralGameException("I'm not expecting a role assignment from you.");
+    }
+    
+    public List<User> getPlayersWithoutRoles() {
+        List<User> list = new ArrayList<User>();
+        for(Entry<User, List<GameRole>> entry : playerToRolesMap.entrySet()) {
+            if(entry.getValue().isEmpty()) {
+                list.add(entry.getKey());
+            }
+        }
+        return list;
     }
 
     public Map<User, List<GameRole>> giveOutNondefaultRoles() throws GeneralGameException {
