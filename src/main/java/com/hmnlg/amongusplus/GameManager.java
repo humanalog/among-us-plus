@@ -23,9 +23,9 @@ import org.joda.time.Instant;
  * @author maikotui
  */
 public class GameManager {
-    
+
     public Message displayMessge;
-    
+
     /**
      * The main list of players and the roles that each player holds
      */
@@ -126,11 +126,11 @@ public class GameManager {
         }
         throw new GeneralGameException("I'm not expecting a role assignment from you.");
     }
-    
+
     public List<User> getPlayersWithoutRoles() {
         List<User> list = new ArrayList<User>();
-        for(Entry<User, List<GameRole>> entry : playerToRolesMap.entrySet()) {
-            if(entry.getValue().isEmpty()) {
+        for (Entry<User, List<GameRole>> entry : playerToRolesMap.entrySet()) {
+            if (entry.getValue().isEmpty()) {
                 list.add(entry.getKey());
             }
         }
@@ -138,12 +138,19 @@ public class GameManager {
     }
 
     public Map<User, List<GameRole>> giveOutNondefaultRoles() throws GeneralGameException {
+        List<User> playersWithAssignableRoles = getAllPlayers();
         for (GameRole assignableRole : allGameRoles) {
-            User assignableUser = getUserWhoCanAcceptRole(getAllPlayers(), assignableRole);
-            if (assignableUser != null) {
-                playerToRolesMap.get(assignableUser).add(assignableRole);
-            } else {
-                throw new GeneralGameException(String.format("Could not find a player to assign %s.", assignableRole.name));
+            if (!playersWithAssignableRoles.isEmpty()) {
+                User assignableUser = getUserWhoCanAcceptRole(playersWithAssignableRoles, assignableRole);
+                if (assignableUser != null) {
+                    playersWithAssignableRoles.remove(assignableUser);
+                    playerToRolesMap.get(assignableUser).add(assignableRole);
+                } else {
+                    throw new GeneralGameException(String.format("Could not find a player to assign the role '%s'.", assignableRole.name));
+                }
+            }
+            else {
+                throw new GeneralGameException(String.format("Could not find a player to assign '%s'.", assignableRole.name));
             }
         }
 
@@ -153,10 +160,10 @@ public class GameManager {
     private User getUserWhoCanAcceptRole(List<User> playerList, GameRole targetRole) {
         // For generating a random value to pick a random player
         Random rand = new Random();
-        
+
         // The user that can accept the targetRole
         User userToGiveRole = null;
-        
+
         // If an acceptable player has been found
         boolean foundAcceptablePlayer = false;
 
