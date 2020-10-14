@@ -5,6 +5,7 @@
  */
 package com.hmnlg.amongusplus;
 
+import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -15,13 +16,17 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import net.dv8tion.jda.core.EmbedBuilder;
 import net.dv8tion.jda.core.entities.Guild;
 import net.dv8tion.jda.core.entities.Member;
 import net.dv8tion.jda.core.entities.Message;
+import net.dv8tion.jda.core.entities.MessageEmbed;
+import net.dv8tion.jda.core.entities.MessageReaction;
 import net.dv8tion.jda.core.entities.User;
 import net.dv8tion.jda.core.entities.VoiceChannel;
 import net.dv8tion.jda.core.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.core.events.message.priv.PrivateMessageReceivedEvent;
+import net.dv8tion.jda.core.events.message.react.MessageReactionAddEvent;
 import net.dv8tion.jda.core.hooks.ListenerAdapter;
 import org.apache.commons.text.similarity.LevenshteinDistance;
 import org.joda.time.Instant;
@@ -45,10 +50,20 @@ public class GameListener extends ListenerAdapter {
     private final List<GameRole> allRoles;
 
     /**
+     * Role for the crewmates
+     */
+    private GameRole crewRole = new GameRole();
+
+    /**
+     * Role for the imposters
+     */
+    private GameRole imposterRole = new GameRole();
+
+    /**
      * The database of all created games. This will be purged periodically (see
      * purgeIntervalInMinutes)
      */
-    private final Map<VoiceChannel, GameManager> gameDB;
+    private final Map<User, GameManager> gameDB;
 
     /**
      * The timer that will run the purge command
@@ -83,6 +98,14 @@ public class GameListener extends ListenerAdapter {
 
         // Assign from arguments
         this.allRoles = allRoles;
+        for (GameRole role : this.allRoles) {
+            if (role.id == 1) {
+                crewRole = role;
+            }
+            if (role.id == 2) {
+                imposterRole = role;
+            }
+        }
         this.debug = debug;
 
         // Create a new database
@@ -105,6 +128,14 @@ public class GameListener extends ListenerAdapter {
 
         // Assign from arguments
         this.allRoles = gameListener.allRoles;
+        for (GameRole role : this.allRoles) {
+            if (role.id == 1) {
+                crewRole = role;
+            }
+            if (role.id == 2) {
+                imposterRole = role;
+            }
+        }
         this.debug = gameListener.debug;
 
         // Create a new database
@@ -142,12 +173,12 @@ public class GameListener extends ListenerAdapter {
             return;
         }
 
-        // Get and store message and text content (used to simplify calls
-        Message message = event.getMessage();
-        String content = message.getContentRaw();
-
         // All Bot Commands
-        if (content.startsWith(prefix)) {
+        if (event.getMessage().getContentRaw().startsWith(prefix)) {
+
+            // Get and store message and text content (used to simplify calls
+            Message message = event.getMessage();
+            String content = message.getContentRaw();
 
             // ----- ALWAYS ACTIVE COMMANDS -----
             // Ping Pong
@@ -164,10 +195,10 @@ public class GameListener extends ListenerAdapter {
                 String helpText = prefix + "ping - Ping Pong to make sure I'm awake.\n\n";
                 helpText += prefix + "roles - Gives a list of roles that you can use in game.\n\n";
                 helpText += prefix + "create - Creates a new game in the voice channel you are in. (Best in Among Us VC). Note: Everyone in that voice channel will be added. Use the role names or alias to add them into the game on creation.\n\n";
-                helpText += prefix + "start - Starts the game. After this command is issued, everyone playing should message the bot to ready up.\n\n";
-                helpText += prefix + "restart - At the end of the round, use this command to restart the game. Everyone will have to ready up with their role again.\n\n";
-                helpText += prefix + "stop - If you are done playing among us, issue this command to stop the current game.";
-                message.addReaction("\u2705").queue();
+                helpText += prefix + "info - Shows the information for the game you are hosting. If you need to move the message to another chat, this is the best way to do it.";
+                helpText += prefix + "padd/prem - Adds or removes a player from a game.";
+                helpText += prefix + "radd/rrem - Adds or removes a role from a game.";
+                helpText += prefix + "stop - If you are done playing among us, issue this command at any time to stop the current game.";
                 sendResponse(message, helpText);
                 if (debug) {
                     Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Responded to help command from %s", message.getAuthor().getName()));
@@ -188,151 +219,267 @@ public class GameListener extends ListenerAdapter {
             // ----- GAME COMMANDS ----
             // Create command
             if (content.startsWith(prefix + "create")) {
-                VoiceChannel activeVoiceChannel = event.getMember().getVoiceState().getChannel();
-                if (activeVoiceChannel != null) {
-                    createGame(event.getMessage(), activeVoiceChannel);
-                } else {
-                    sendErrorResponse(event.getMessage(), "Please join a voice channel to create a game.");
-                }
+                createGame(event.getMessage());
             }
 
-            // Start command
-            if (content.equals(prefix + "start")) {
-                VoiceChannel activeVoiceChannel = event.getMember().getVoiceState().getChannel();
-                if (activeVoiceChannel != null) {
-                    GameManager game = gameDB.get(activeVoiceChannel);
-                    if (game != null) {
-                        startGame(event.getMessage(), game);
-                    } else {
-                        sendErrorResponse(event.getMessage(), "This voice channel is not running a game.");
+            // Info command
+            if (content.equals(prefix + "info")) {
+                GameManager game = gameDB.get(event.getAuthor());
+                if (game != null) {
+                    // Get the embedded message 
+                    List<MessageEmbed> embeds = game.displayMessge.getEmbeds();
+                    if (embeds.size() > 0) {
+                        // Clone the embedded message
+                        MessageEmbed embed = embeds.get(0);
+                        game.displayMessge.getChannel().sendMessage(embed).queue((newMessage) -> { // Send the message and then add the appropriate reactions
+                            switch (game.getState()) { // Add reactions based on the gamestate
+                                case NEW -> {
+                                    newMessage.addReaction("\u2705").queue(); // Checkmark
+                                }
+                                case PREGAME -> {
+                                    newMessage.addReaction("\uD83C\uDDE8").queue(); // C
+                                    newMessage.addReaction("\uD83C\uDDEE").queue(); // I
+                                }
+                                case ACTIVE -> {
+                                    newMessage.addReaction("\uD83D\uDD04").queue(); // Restart
+                                    newMessage.addReaction("\uD83D\uDED1").queue(); // Stop
+                                }
+                                default -> {
+                                }
+                            }
+
+                            // Delete old message and replace with new message
+                            game.displayMessge.delete().queue();
+                            game.displayMessge = newMessage;
+                        });
                     }
-                } else {
-                    sendErrorResponse(event.getMessage(), "Please join a voice channel with an active game to run this command.");
                 }
             }
 
-            // Reset command
-            if (content.equals(prefix + "reset")) {
-                VoiceChannel activeVoiceChannel = event.getMember().getVoiceState().getChannel();
-                if (activeVoiceChannel != null) {
-                    GameManager game = gameDB.get(activeVoiceChannel);
-                    if (game != null) {
-                        game.resetGame();
-                        sendResponse(event.getMessage(), "Game has been reset.");
-                    } else {
-                        sendErrorResponse(event.getMessage(), "This voice channel is not running a game.");
-                    }
-                } else {
-                    sendErrorResponse(event.getMessage(), "Please join a voice channel with an active game to run this command.");
-                }
-            }
-
+            // Stop command
             if (content.equals(prefix + "stop")) {
-                VoiceChannel activeVoiceChannel = event.getMember().getVoiceState().getChannel();
-                if (activeVoiceChannel != null) {
-                    if (gameDB.remove(activeVoiceChannel) != null) {
-                        sendResponse(event.getMessage(), "Stopped game.");
-                    } else {
-                        sendErrorResponse(event.getMessage(), "This voice channel is not running a game.");
+                tryDeleteUsersGame(event.getAuthor());
+            }
+
+            // Add player command
+            if (content.startsWith(prefix + "padd")) {
+                // Ensure there is a player name provided
+                if (content.length() < prefix.length() + 5) {
+                    sendErrorResponse(event.getMessage(), "Please specify a player to add.");
+                    return;
+                }
+
+                // Get the game the author is the owner of
+                GameManager game = gameDB.get(event.getAuthor());
+                if (game != null) {
+                    // Parse the name provided
+                    String nameToAdd = content.substring(prefix.length() + 5);
+                    User user = findUserInGuild(event.getGuild(), nameToAdd);
+
+                    // Add the player
+                    if (user != null) {
+                        game.addPlayer(user);
+                        refreshNewGameMessage(game);
                     }
                 } else {
-                    sendErrorResponse(event.getMessage(), "Please join a voice channel with an active game to run this command.");
+                    sendErrorResponse(event.getMessage(), "You are not the owner of any active games.");
                 }
             }
 
-            if (content.startsWith(prefix + "padd") && debug) {
-                VoiceChannel activeVoiceChannel = event.getMember().getVoiceState().getChannel();
-                if (activeVoiceChannel != null) {
-                    GameManager game = gameDB.get(activeVoiceChannel);
-                    if (game != null) {
-                        String[] postCommandArgs = event.getMessage().getContentRaw().substring((prefix + "padd").length() + 1).split(" ");
-                        if (postCommandArgs.length > 0) {
-                            User user = findUserInGuild(event.getGuild(), postCommandArgs[0]);
-                            game.addPlayer(user);
-                            sendResponse(event.getMessage(), "Added " + user.getName() + " to the game.");
+            if (content.startsWith(prefix + "prem")) {
+                // Ensure there is a player name provided
+                if (content.length() < prefix.length() + 5) {
+                    sendErrorResponse(event.getMessage(), "Please specify a player to remove.");
+                    return;
+                }
+
+                // Get the game the author is the owner of
+                GameManager game = gameDB.get(event.getAuthor());
+
+                if (game != null) {
+                    // Parse the name provided
+                    String playerToRemove = content.substring(prefix.length() + 5);
+                    User user = findUserInGuild(event.getGuild(), playerToRemove);
+
+                    if (user.equals(event.getAuthor())) {
+                        sendErrorResponse(event.getMessage(), "You can't remove yourself from the game since you're the game leader.");
+                        return;
+                    }
+
+                    // Remove the player
+                    if (user != null) {
+                        if (game.removePlayer(user)) {
+                            refreshNewGameMessage(game);
                         }
-                    } else {
-                        sendErrorResponse(event.getMessage(), "This voice channel is not running a game.");
                     }
                 } else {
-                    sendErrorResponse(event.getMessage(), "Please join a voice channel with an active game to run this command.");
+                    sendErrorResponse(event.getMessage(), "You are not the owner of any active games.");
                 }
             }
 
-            if (content.startsWith(prefix + "prem") && debug) {
-                VoiceChannel activeVoiceChannel = event.getMember().getVoiceState().getChannel();
-                if (activeVoiceChannel != null) {
-                    GameManager game = gameDB.get(activeVoiceChannel);
-                    if (game != null) {
-                        String[] postCommandArgs = event.getMessage().getContentRaw().substring((prefix + "padd").length() + 1).split(" ");
-                        if (postCommandArgs.length > 0) {
-                            User user = findUserInGuild(event.getGuild(), postCommandArgs[0]);
-                            game.removePlayer(user);
-                            sendResponse(event.getMessage(), "Added " + user.getName() + " to the game.");
+            if (content.startsWith(prefix + "radd")) {
+                if (content.length() < prefix.length() + 5) {
+                    sendErrorResponse(event.getMessage(), "Please specify a role to add.");
+                    return;
+                }
+
+                // Get the game the author is the owner of
+                GameManager game = gameDB.get(event.getAuthor());
+                if (game != null) {
+                    // Parse the role provided
+                    String roleToAdd = content.substring(prefix.length() + 5);
+                    GameRole role = findRoleFromString(roleToAdd);
+
+                    // Add the role
+                    if (role != null) {
+                        game.addRole(role);
+                        refreshNewGameMessage(game);
+                    }
+
+                } else {
+                    sendErrorResponse(event.getMessage(), "You are not the owner of any active games.");
+                }
+            }
+
+            if (content.startsWith(prefix + "rrem")) {
+                if (content.length() < prefix.length() + 5) {
+                    sendErrorResponse(event.getMessage(), "Please specify a role to add.");
+                    return;
+                }
+
+                // Get the game the author is the owner of
+                GameManager game = gameDB.get(event.getAuthor());
+                if (game != null) {
+                    // Parse the role provided
+                    String roleToRemove = content.substring(prefix.length() + 5);
+                    GameRole role = findRoleFromString(roleToRemove);
+
+                    // Add the role
+                    if (role != null) {
+                        if (game.removeRole(role)) {
+                            refreshNewGameMessage(game);
                         }
-                    } else {
-                        sendErrorResponse(event.getMessage(), "This voice channel is not running a game.");
                     }
-                } else {
-                    sendErrorResponse(event.getMessage(), "Please join a voice channel with an active game to run this command.");
-                }
-            }
 
-            if (content.startsWith(prefix + "radd") && debug) {
-                VoiceChannel activeVoiceChannel = event.getMember().getVoiceState().getChannel();
-                if (activeVoiceChannel != null) {
-                    GameManager game = gameDB.get(activeVoiceChannel);
-                    if (game != null) {
-                        String[] postCommandArgs = event.getMessage().getContentRaw().substring((prefix + "radd").length() + 1).split(" ");
-                        if (postCommandArgs.length > 0) {
-                            GameRole role = findRoleFromString(postCommandArgs[0]);
-                            game.addRole(role);
-                            sendResponse(event.getMessage(), "Added role '" + role.name + "' to the game.");
-                        }
-                    } else {
-                        sendErrorResponse(event.getMessage(), "This voice channel is not running a game.");
-                    }
                 } else {
-                    sendErrorResponse(event.getMessage(), "Please join a voice channel with an active game to run this command.");
+                    sendErrorResponse(event.getMessage(), "You are not the owner of any active games.");
                 }
-            }
-
-            if (content.startsWith(prefix + "rrem") && debug) {
-                VoiceChannel activeVoiceChannel = event.getMember().getVoiceState().getChannel();
-                if (activeVoiceChannel != null) {
-                    GameManager game = gameDB.get(activeVoiceChannel);
-                    if (game != null) {
-                        String[] postCommandArgs = event.getMessage().getContentRaw().substring((prefix + "radd").length() + 1).split(" ");
-                        if (postCommandArgs.length > 0) {
-                            GameRole role = findRoleFromString(postCommandArgs[0]);
-                            game.removeRole(role);
-                            sendResponse(event.getMessage(), "Removes role '" + role.name + "' to the game.");
-                        }
-                    } else {
-                        sendErrorResponse(event.getMessage(), "This voice channel is not running a game.");
-                    }
-                } else {
-                    sendErrorResponse(event.getMessage(), "Please join a voice channel with an active game to run this command.");
-                }
-            }
-
-            if (content.equals(prefix + "plist")) {
-                VoiceChannel activeVoiceChannel = event.getMember().getVoiceState().getChannel();
-                if (activeVoiceChannel != null) {
-                    GameManager game = gameDB.get(activeVoiceChannel);
-                    if (game != null) {
-                        String playerList = "Player List:\n";
-                        playerList = game.getAllPlayers().stream().map(user -> user.getName() + "\n").reduce(playerList, String::concat);
-                        sendResponse(event.getMessage(), playerList);
-                    } else {
-                        sendErrorResponse(event.getMessage(), "This voice channel is not running a game.");
-                    }
-                } else {
-                    sendErrorResponse(event.getMessage(), "Please join a voice channel with an active game to run this command.");
-                }
-
             }
         }
+    }
+
+    private void refreshNewGameMessage(GameManager game) {
+        if (game.displayMessge != null) {
+            List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+            if (!gameMessageEmbeds.isEmpty()) {
+                MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+
+                EmbedBuilder eb = new EmbedBuilder();
+                eb.setColor(originalEmbed.getColor());
+                eb.setTitle(originalEmbed.getTitle());
+                eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                StringBuilder sb = new StringBuilder();
+                for (GameRole role : game.allGameRoles) {
+                    sb.append(String.format("> __%s__:\n> ```%s```\n", role.name, role.description));
+                }
+                eb.addField("Roles:", sb.toString(), true);
+
+                sb = new StringBuilder();
+                for (User user : game.getAllPlayers()) {
+                    sb.append(user.getAsMention());
+                    sb.append("\n");
+                }
+                eb.addField("Players", String.format(">>> %s", sb.toString()), true);
+
+                eb.addField("What Next?", "To add or remove players, use the ***padd*** or ***prem*** commands.\nTo add or remove roles, use the ***radd*** or ***rrem*** commands.\nTo start the game, click on the \u2705 emote.", false);
+
+                eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                game.displayMessge.editMessage(eb.build()).queue();
+            }
+        }
+    }
+
+    @Override
+    public void onMessageReactionAdd(MessageReactionAddEvent event) {
+        event.getChannel().getMessageById(event.getMessageId()).queue(message -> {
+            if (message.getAuthor().equals(event.getJDA().getSelfUser()) && !event.getUser().equals(event.getJDA().getSelfUser())) { // If message is from this bot and a user other than this bot reacted to a message
+                User reactor = event.getUser();
+                String reactionText = event.getReactionEmote().getName();
+                event.getReaction().removeReaction(event.getUser()).queue();
+
+                // Check if this message is a game display message
+                for (GameManager game : gameDB.values()) {
+                    if (game.displayMessge.getId() == null ? message.getId() == null : game.displayMessge.getId().equals(message.getId())) { // Message is a game message
+                        onDisplayMessageUpdate(reactor, reactionText, game);
+                        return;
+                    }
+                }
+            }
+        });
+    }
+
+    private void onDisplayMessageUpdate(User updater, String updateText, GameManager game) {
+        switch (game.getState()) {
+            case NEW -> {
+                if (updateText.contains("\u2705")) { // Checkmark
+                    game.displayMessge.clearReactions().queue((obj) -> startGame(game));
+                }
+            }
+            case PREGAME -> {
+                GameRole chosenRole = null;
+                if (updateText.contains("\uD83C\uDDE8")) { // C
+                    chosenRole = this.crewRole;
+                } else if (updateText.contains("\uD83C\uDDEE")) { // I
+                    chosenRole = this.imposterRole;
+                }
+
+                readyUp(updater, chosenRole, game);
+            }
+            case ACTIVE -> {
+                if (updateText.contains("\uD83D\uDD04")) { // Restart command
+                    game.resetGame();
+                } else if (updateText.contains("\uD83D\uDED1")) { // Stop command
+                    tryDeleteUsersGame(updater);
+                }
+            }
+            default -> {
+            }
+        }
+    }
+
+    private boolean tryDeleteUsersGame(User user) {
+        GameManager game = gameDB.get(user);
+        if (game == null) {
+            return false;
+        }
+
+        // Update the display message if the game has it
+        if (game.displayMessge != null) {
+            game.displayMessge.clearReactions().queue((obj) -> {
+                List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+                if (!gameMessageEmbeds.isEmpty()) {
+                    MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+
+                    EmbedBuilder eb = new EmbedBuilder();
+                    eb.setColor(Color.RED);
+                    eb.setTitle(originalEmbed.getTitle());
+                    eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                    eb.addField("Game has been stopped.", "Thanks for playing!", false);
+
+                    eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                    game.displayMessge.editMessage(eb.build()).queue();
+                }
+            });
+        }
+
+        // Remove game from database
+        gameDB.remove(user);
+
+        return true;
     }
 
     /**
@@ -342,15 +489,16 @@ public class GameListener extends ListenerAdapter {
      */
     @Override
     public void onPrivateMessageReceived(PrivateMessageReceivedEvent event) {
-        // Ready up message
-        if (event.getMessage().getContentRaw().startsWith("ready")) {
-            GameManager game = findGameForUser(event.getAuthor());
-            if (game != null) {
-                readyUp(event.getMessage(), game);
-            } else {
-                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
-            }
-        }
+        // Ready up moved to embed reaction
+//        // Ready up message
+//        if (event.getMessage().getContentRaw().startsWith("ready")) {
+//            GameManager game = findGameForUser(event.getAuthor());
+//            if (game != null) {
+//                readyUp(event.getMessage(), game);
+//            } else {
+//                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
+//            }
+//        }
 
         // Veto command
         if (event.getMessage().getContentRaw().startsWith("veto")) {
@@ -384,60 +532,80 @@ public class GameListener extends ListenerAdapter {
     }
 
     /**
-     * Sends a list of commands and a description of them.
-     *
-     * @param event
-     */
-    private void sendHelpInfo(MessageReceivedEvent event) {
-        String helpText = prefix + "ping - Ping Pong to make sure I'm awake.\n\n";
-        helpText += prefix + "roles - Gives a list of roles that you can use in game.\n\n";
-        helpText += prefix + "create - Creates a new game in the voice channel you are in. (Best in Among Us VC). Note: Everyone in that voice channel will be added. Use the role names or alias to add them into the game on creation.\n\n";
-        helpText += prefix + "start - Starts the game. After this command is issued, everyone playing should message the bot to ready up.\n\n";
-        helpText += prefix + "restart - At the end of the round, use this command to restart the game. Everyone will have to ready up with their role again.\n\n";
-        helpText += prefix + "stop - If you are done playing among us, issue this command to stop the current game.";
-        sendResponse(event.getMessage(), helpText);
-    }
-
-    /**
      * Parses the create command. Creates a game for the user who sent the
      * message using the audio channel they're in.
      *
      * @param event Message received event that issued the command
      */
-    private void createGame(Message sourceMessage, VoiceChannel vc) {
-        // Send starting message
-        sendResponse(sourceMessage, "Creating game for voice channel '" + vc.getName() + "'.");
+    private void createGame(Message sourceMessage) {
+        if (gameDB.containsKey(sourceMessage.getAuthor())) {
+            sendErrorResponse(sourceMessage, "You are already the creator of another game.");
+            return;
+        }
 
-        // Parse command for roles
+        // Create the list of game members and add the author of the message as a member
+        ArrayList<User> gameMembers = new ArrayList<>();
+        gameMembers.add(sourceMessage.getAuthor());
+
+        // Parse out the arguments given
         HashSet<GameRole> rolesForThisGame = new HashSet<>();
         if (sourceMessage.getContentRaw().length() > (prefix + "create").length()) {
             String[] postCommandArgs = sourceMessage.getContentRaw().substring((prefix + "create").length() + 1).split(" ");
-            for (String roleString : postCommandArgs) {
-                GameRole role = findRoleFromString(roleString);
+            for (String arg : postCommandArgs) {
+                if (arg.equals("auto")) {
+                    // Add all users from voice chat except for the author to the game
+                    VoiceChannel vc = sourceMessage.getMember().getVoiceState().getChannel();
+                    if (vc != null) {
+                        for (Member vcMember : vc.getMembers()) {
+                            if (!vcMember.getUser().equals(sourceMessage.getAuthor())) {
+                                gameMembers.add(vcMember.getUser());
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                GameRole role = findRoleFromString(arg);
                 if (role != null && !role.isDefault) {
                     rolesForThisGame.add(role);
                 }
             }
-            sendResponse(sourceMessage, "Roles added: " + rolesForThisGame.toString());
-        } else {
-            sendErrorResponse(sourceMessage, "Please include additional roles to assign. Use the roles command for more info.");
-            return;
         }
 
-        // Get a list of gamemembers and their names
-        ArrayList<User> gameMembers = new ArrayList<>();
-        String playerList = "";
-        playerList = vc.getMembers().stream().map(member -> {
-            gameMembers.add(member.getUser());
-            return member;
-        }).map(member -> member.getUser().getName() + "\n").reduce(playerList, String::concat);
+        EmbedBuilder eb = new EmbedBuilder();
+        eb.setColor(Color.green);
+        eb.setTitle(String.format("Among Us+ Game", sourceMessage.getAuthor().getName()));
+        eb.setAuthor("Among Us+ Bot", "https://github.com/humanalog/among-us-plus/", sourceMessage.getJDA().getSelfUser().getAvatarUrl());
 
-        // Try to start game with given member list
-        gameDB.put(vc, new GameManager(gameMembers, new ArrayList<>(rolesForThisGame)));
+        StringBuilder sb = new StringBuilder();
+        for (GameRole role : rolesForThisGame) {
+            sb.append(String.format("> __%s__:\n> ```%s```\n", role.name, role.description));
+        }
+        eb.addField("Roles:", sb.toString(), true);
+
+        sb = new StringBuilder();
+        for (User user : gameMembers) {
+            sb.append(user.getAsMention());
+            sb.append("\n");
+        }
+        eb.addField("Players", String.format(">>> %s", sb.toString()), true);
+
+        eb.addField("What Next?", "To add or remove players, use the ***padd*** or ***prem*** commands.\nTo add or remove roles, use the ***radd*** or ***rrem*** commands.\nTo start the game, click on the \u2705 emote.", false);
+
+        eb.setFooter(String.format("Game created by %s", sourceMessage.getAuthor().getAsTag()), sourceMessage.getAuthor().getAvatarUrl());
+
+        sourceMessage.getChannel().sendMessage(eb.build()).queue(message -> {
+            // Try to start game with given member list
+            GameManager game = new GameManager(gameMembers, new ArrayList<>(rolesForThisGame));
+            game.displayMessge = message;
+
+            gameDB.put(sourceMessage.getAuthor(), game);
+
+            message.addReaction("\u2705").queue(); //Checkmark
+        });
 
         // Send a message to let the user know the game was created
         sourceMessage.addReaction("\u2705").queue();
-        sendResponse(sourceMessage, "The players for this game are:\n" + playerList);
     }
 
     /**
@@ -445,57 +613,154 @@ public class GameListener extends ListenerAdapter {
      *
      * @param event
      */
-    private void startGame(Message sourceMessage, GameManager game) {
+    private void startGame(GameManager game) {
         // Try to move to pregame.
         try {
             game.moveToPregame();
-            sourceMessage.addReaction("\u2705").queue();
-            sendResponse(sourceMessage, "Game is started and is waiting for everyone to ready up. Everyone playing should ready up by messaging me whether they are an imposter or crewmate. Message me 'ready [role]'.");
+
+            // Update the game message
+            List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+            if (!gameMessageEmbeds.isEmpty()) {
+                MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+                EmbedBuilder eb = new EmbedBuilder();
+                eb.setColor(Color.green);
+                eb.setTitle(originalEmbed.getTitle());
+                eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                // Print not ready users
+                List<User> usersNotReady = game.getPlayersWithoutRoles();
+                StringBuilder sb = new StringBuilder();
+                if (!usersNotReady.isEmpty()) {
+                    sb.append(">>> ");
+                }
+                for (User user : usersNotReady) {
+                    sb.append(user.getAsMention()).append("\n");
+                }
+                eb.addField("Not Ready", sb.toString(), true);
+
+                // Get ready users
+                List<User> readyUsers = game.getAllPlayers();
+                readyUsers.removeAll(usersNotReady);
+
+                // Print out ready
+                sb = new StringBuilder();
+                if (!readyUsers.isEmpty()) {
+                    sb.append(">>> ");
+                }
+                for (User user : readyUsers) {
+                    sb.append(user.getAsMention()).append("\n");
+                }
+                eb.addField("Ready", sb.toString(), true);
+
+                eb.addField("Choose Your Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
+
+                eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                game.displayMessge.editMessage(eb.build()).queue((message) -> {
+                    message.addReaction("\uD83C\uDDE8").queue(); // C
+                    message.addReaction("\uD83C\uDDEE").queue(); // I
+                });
+            }
+
         } catch (GeneralGameException err) {
-            sendErrorResponse(sourceMessage, err.getMessage());
+            // TODO: Do something if an error occurs
+            Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, err.getMessage(), err);
         }
     }
 
-    private void readyUp(Message sourceMessage, GameManager game) {
-        String[] postCommandArgs = sourceMessage.getContentRaw().substring(("ready").length() + 1).split(" ");
-        if (postCommandArgs.length > 0) {
-            GameRole readyRole = findRoleFromString(postCommandArgs[0]);
-            if (readyRole != null) {
-                try {
-                    if (game.attemptGameStartWithRoleAssignment(sourceMessage.getAuthor(), readyRole)) {
-                        // Everyone is ready, time to start the game.
-                        try {
-                            Map<User, List<GameRole>> roleMap = game.giveOutNondefaultRoles();
-                            
-                            // Send role assignment message for non default roles and send everyone a game starting message
-                            game.getAllPlayers().forEach(player -> {
-                                player.openPrivateChannel().queue((channel) -> {
-                                    game.getRolesForPlayer(player).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
-                                        channel.sendMessage(role.assignmentMessage).queue();
-                                    });
-                                    channel.sendMessage("Everyone's in! Game is starting.").queue();
-                                });
-                            });
+    private void readyUp(User user, GameRole chosenRole, GameManager game) {
+        if (chosenRole != null) {
+            try {
+                if (game.attemptGameStartWithRoleAssignment(user, chosenRole)) {
 
-                            // Send a debug message
-                            if (debug) {
-                                Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
-                            }
-                        } catch (GeneralGameException err) {
-                            sendErrorResponse(sourceMessage, err.getMessage());
-                            Logger.getLogger(GameListener.class.getName()).log(Level.WARNING, err.getMessage());
+                    Map<User, List<GameRole>> roleMap = game.giveOutNondefaultRoles();
+
+                    // Send role assignment message for non default roles and send everyone a game starting message
+                    game.getAllPlayers().forEach(player -> {
+                        player.openPrivateChannel().queue((channel) -> {
+                            game.getRolesForPlayer(player).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
+                                channel.sendMessage(role.assignmentMessage).queue(); // TODO: Move to embed instead of messaging
+                            });
+                        });
+                    });
+
+                    // Update the game message
+                    game.displayMessge.clearReactions().queue((obj) -> {
+                        List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+                        if (!gameMessageEmbeds.isEmpty()) {
+                            MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+                            EmbedBuilder eb = new EmbedBuilder();
+                            eb.setColor(Color.green);
+                            eb.setTitle(originalEmbed.getTitle());
+                            eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                            eb.addField(originalEmbed.getFields().get(0));
+                            eb.addField(originalEmbed.getFields().get(1));
+                            eb.addField("What's Next?", "Choose \uD83D\uDD04 to restart the game.\nChoose \uD83D\uDED1 to stop the game.", false);
+
+                            eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                            game.displayMessge.editMessage(eb.build()).queue((message) -> {
+                                message.addReaction("\uD83D\uDD04").queue(); // Redo
+                                message.addReaction("\uD83D\uDED1").queue(); // Stop
+                            });
                         }
-                    } else {
-                        sourceMessage.getChannel().sendMessage("You're in. Waiting on others to ready up.").queue();
+                    });
+                    // Send a debug message
+                    if (debug) {
+                        Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
                     }
-                } catch (GeneralGameException err) {
-                    sourceMessage.getChannel().sendMessage(err.getMessage()).queue();
+                } else {
+                    List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+                    if (!gameMessageEmbeds.isEmpty()) {
+                        MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+                        EmbedBuilder eb = new EmbedBuilder();
+                        eb.setColor(Color.green);
+                        eb.setTitle(originalEmbed.getTitle());
+                        eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                        // Print not ready users
+                        List<User> usersNotReady = game.getPlayersWithoutRoles();
+                        StringBuilder sb = new StringBuilder();
+                        if (!usersNotReady.isEmpty()) {
+                            sb.append(">>> ");
+                        }
+                        for (User notReadyUser : usersNotReady) {
+                            sb.append(notReadyUser.getAsMention()).append("\n");
+                        }
+                        eb.addField("Not Ready", sb.toString(), true);
+
+                        // Get ready users
+                        List<User> readyUsers = game.getAllPlayers();
+                        readyUsers.removeAll(usersNotReady);
+
+                        // Print out ready
+                        sb = new StringBuilder();
+                        if (!readyUsers.isEmpty()) {
+                            sb.append(">>> ");
+                        }
+                        for (User readyUser : readyUsers) {
+                            sb.append(readyUser.getAsMention()).append("\n");
+                        }
+                        eb.addField("Ready", sb.toString(), true);
+
+                        eb.addField("Choose Your Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
+
+                        eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                        game.displayMessge.editMessage(eb.build()).queue((message) -> {
+                            message.addReaction("\uD83C\uDDE8").queue(); // C
+                            message.addReaction("\uD83C\uDDEE").queue(); // I
+                        });
+                    }
                 }
-            } else {
-                sourceMessage.getChannel().sendMessage("Could not identify the '" + postCommandArgs[0] + "' role.").queue();
+            } catch (GeneralGameException ex) {
+                Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
+                if(game.displayMessge != null ){
+                    game.displayMessge.getChannel().sendMessage(ex.getMessage()).queue();
+                }
+                this.tryDeleteUsersGame(user);
             }
-        } else {
-            sourceMessage.getChannel().sendMessage("Please give the role you are readying up as (use 'ready [role]').").queue();
         }
     }
 
@@ -573,7 +838,16 @@ public class GameListener extends ListenerAdapter {
             Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
         }
 
-        gameDB.values().removeIf(game -> !game.isActive() && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L);
+        List<User> gameOwners = new ArrayList<>(gameDB.keySet());
+        gameOwners.forEach(gameOwner -> {
+            GameManager game = gameDB.get(gameOwner);
+            if (game.getState() != GameState.ACTIVE && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L) {
+                tryDeleteUsersGame(gameOwner);
+                gameOwner.openPrivateChannel().queue((channel) -> {
+                    channel.sendMessage("Your Among Us+ game has been inactive for longer than 20 minutes. It has been automatically stopped.").queue();
+                });
+            }
+        });
 
         if (debug) {
             Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
@@ -597,14 +871,9 @@ public class GameListener extends ListenerAdapter {
     }
 
     private GameManager findGameForUser(User user) {
-        for (Guild guild : user.getMutualGuilds()) {
-            for (VoiceChannel vc : guild.getVoiceChannels()) {
-                GameManager game = gameDB.get(vc);
-                if (game != null) {
-                    if (game.getAllPlayers().contains(user)) {
-                        return game;
-                    }
-                }
+        for (GameManager game : gameDB.values()) {
+            if (game.getAllPlayers().contains(user)) {
+                return game;
             }
         }
         return null;

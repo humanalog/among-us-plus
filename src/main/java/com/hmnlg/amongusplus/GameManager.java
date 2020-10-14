@@ -10,8 +10,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
+import net.dv8tion.jda.core.entities.Message;
 import net.dv8tion.jda.core.entities.User;
 import org.joda.time.Instant;
 
@@ -22,6 +24,8 @@ import org.joda.time.Instant;
  */
 public class GameManager {
 
+    public Message displayMessge;
+
     /**
      * The main list of players and the roles that each player holds
      */
@@ -30,12 +34,12 @@ public class GameManager {
     /**
      * A list of all roles that are usable for this game
      */
-    private final List<GameRole> gameRoles;
+    public final List<GameRole> allGameRoles;
 
     /**
      * The current state of the game
      */
-    private GameState state;
+    private GameState state = GameState.NEW;
 
     private Instant stateChangeTime;
 
@@ -57,14 +61,14 @@ public class GameManager {
             playerToRolesMap.put(player, new ArrayList<>());
         });
 
-        this.gameRoles = usableNondefaultRoles;
+        this.allGameRoles = usableNondefaultRoles;
 
         state = GameState.NEW;
         stateChangeTime = new Instant();
     }
 
-    public boolean isActive() {
-        return state == GameState.ACTIVE;
+    public GameState getState() {
+        return state;
     }
 
     public Instant getLastGameStateChangeTime() {
@@ -116,8 +120,6 @@ public class GameManager {
                 return false;
             }
 
-            System.out.println("Game started --- " + playerToRolesMap.toString());
-
             state = GameState.ACTIVE;
             stateChangeTime = new Instant();
             return true;
@@ -125,13 +127,30 @@ public class GameManager {
         throw new GeneralGameException("I'm not expecting a role assignment from you.");
     }
 
+    public List<User> getPlayersWithoutRoles() {
+        List<User> list = new ArrayList<User>();
+        for (Entry<User, List<GameRole>> entry : playerToRolesMap.entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                list.add(entry.getKey());
+            }
+        }
+        return list;
+    }
+
     public Map<User, List<GameRole>> giveOutNondefaultRoles() throws GeneralGameException {
-        for (GameRole assignableRole : gameRoles) {
-            User assignableUser = getUserWhoCanAcceptRole(getAllPlayers(), assignableRole);
-            if (assignableUser != null) {
-                playerToRolesMap.get(assignableUser).add(assignableRole);
-            } else {
-                throw new GeneralGameException(String.format("Could not find a player to assign %s.", assignableRole.name));
+        List<User> playersWithAssignableRoles = getAllPlayers();
+        for (GameRole assignableRole : allGameRoles) {
+            if (!playersWithAssignableRoles.isEmpty()) {
+                User assignableUser = getUserWhoCanAcceptRole(playersWithAssignableRoles, assignableRole);
+                if (assignableUser != null) {
+                    playersWithAssignableRoles.remove(assignableUser);
+                    playerToRolesMap.get(assignableUser).add(assignableRole);
+                } else {
+                    throw new GeneralGameException(String.format("Could not find a player to assign the role '%s'.", assignableRole.name));
+                }
+            }
+            else {
+                throw new GeneralGameException(String.format("Could not find a player to assign '%s'.", assignableRole.name));
             }
         }
 
@@ -141,10 +160,10 @@ public class GameManager {
     private User getUserWhoCanAcceptRole(List<User> playerList, GameRole targetRole) {
         // For generating a random value to pick a random player
         Random rand = new Random();
-        
+
         // The user that can accept the targetRole
         User userToGiveRole = null;
-        
+
         // If an acceptable player has been found
         boolean foundAcceptablePlayer = false;
 
@@ -226,13 +245,13 @@ public class GameManager {
     }
 
     public void addRole(GameRole role) {
-        if (state == GameState.NEW && !gameRoles.contains(role) && !role.isDefault) {
-            gameRoles.add(role);
+        if (state == GameState.NEW && !allGameRoles.contains(role) && !role.isDefault) {
+            allGameRoles.add(role);
         }
     }
 
     public boolean removeRole(GameRole role) {
-        return state == GameState.NEW && gameRoles.remove(role);
+        return state == GameState.NEW && allGameRoles.remove(role);
     }
 
     public List<GameRole> getRolesForPlayer(User player) {
