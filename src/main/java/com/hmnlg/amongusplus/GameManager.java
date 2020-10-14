@@ -10,8 +10,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
+import net.dv8tion.jda.core.entities.Message;
 import net.dv8tion.jda.core.entities.User;
 import org.joda.time.Instant;
 
@@ -21,7 +23,9 @@ import org.joda.time.Instant;
  * @author maikotui
  */
 public class GameManager {
-    
+
+    public Message displayMessge;
+
     /**
      * The main list of players and the roles that each player holds
      */
@@ -30,13 +34,13 @@ public class GameManager {
     /**
      * A list of all roles that are usable for this game
      */
-    private final List<GameRole> gameRoles;
+    public final List<GameRole> allGameRoles;
 
     /**
      * The current state of the game
      */
-    private GameState state;
-    
+    private GameState state = GameState.NEW;
+
     private Instant stateChangeTime;
 
     // Flags to keep track of when an action is used (and only has one use)
@@ -57,16 +61,16 @@ public class GameManager {
             playerToRolesMap.put(player, new ArrayList<>());
         });
 
-        this.gameRoles = usableNondefaultRoles;
+        this.allGameRoles = usableNondefaultRoles;
 
         state = GameState.NEW;
         stateChangeTime = new Instant();
     }
-    
-    public boolean isActive() {
-        return state == GameState.ACTIVE;
+
+    public GameState getState() {
+        return state;
     }
-    
+
     public Instant getLastGameStateChangeTime() {
         return stateChangeTime;
     }
@@ -116,8 +120,6 @@ public class GameManager {
                 return false;
             }
 
-            System.out.println("Game started --- " + playerToRolesMap.toString());
-
             state = GameState.ACTIVE;
             stateChangeTime = new Instant();
             return true;
@@ -125,17 +127,68 @@ public class GameManager {
         throw new GeneralGameException("I'm not expecting a role assignment from you.");
     }
 
-    public void giveOutNondefaultRoles() {
-        Random rand = new Random();
-        List<User> allPlayers = getAllPlayers();
-
-        gameRoles.forEach(assignableRole -> {
-            User userToGiveRole = allPlayers.remove(rand.nextInt(allPlayers.size()));
-            playerToRolesMap.get(userToGiveRole).add(assignableRole);
-        });
+    public List<User> getPlayersWithoutRoles() {
+        List<User> list = new ArrayList<User>();
+        for (Entry<User, List<GameRole>> entry : playerToRolesMap.entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                list.add(entry.getKey());
+            }
+        }
+        return list;
     }
 
-    public void resetGame(){
+    public Map<User, List<GameRole>> giveOutNondefaultRoles() throws GeneralGameException {
+        List<User> playersWithAssignableRoles = getAllPlayers();
+        for (GameRole assignableRole : allGameRoles) {
+            if (!playersWithAssignableRoles.isEmpty()) {
+                User assignableUser = getUserWhoCanAcceptRole(playersWithAssignableRoles, assignableRole);
+                if (assignableUser != null) {
+                    playersWithAssignableRoles.remove(assignableUser);
+                    playerToRolesMap.get(assignableUser).add(assignableRole);
+                } else {
+                    throw new GeneralGameException(String.format("Could not find a player to assign the role '%s'.", assignableRole.name));
+                }
+            }
+            else {
+                throw new GeneralGameException(String.format("Could not find a player to assign '%s'.", assignableRole.name));
+            }
+        }
+
+        return new HashMap<>(playerToRolesMap);
+    }
+
+    private User getUserWhoCanAcceptRole(List<User> playerList, GameRole targetRole) {
+        // For generating a random value to pick a random player
+        Random rand = new Random();
+
+        // The user that can accept the targetRole
+        User userToGiveRole = null;
+
+        // If an acceptable player has been found
+        boolean foundAcceptablePlayer = false;
+
+        do {
+            // Get a random player from the player list
+            // Remove them so we don't get any repeats
+            userToGiveRole = playerList.remove(rand.nextInt(playerList.size())); // Get a random user and remove them from the list (so they can't be picked again)
+
+            // Assume we found an acceptable player
+            foundAcceptablePlayer = true;
+
+            // Check if player is really acceptable
+            for (GameRole activeUserRole : playerToRolesMap.get(userToGiveRole)) { // For each role the user already has
+                for (int unstackableRoleId : targetRole.unstackableRoleIds) { // For each unstackableRoleId
+                    if (activeUserRole.id == unstackableRoleId) { // If a role the player has is an unstackable role for this game role, retry
+                        foundAcceptablePlayer = false;
+                    }
+                }
+            }
+        } while (!playerList.isEmpty() && !foundAcceptablePlayer);
+
+        return userToGiveRole;
+    }
+
+    public void resetGame() {
         // Clear roles
         Set<User> userSet = new HashSet<>(playerToRolesMap.keySet());
         playerToRolesMap.clear();
@@ -192,19 +245,19 @@ public class GameManager {
     }
 
     public void addRole(GameRole role) {
-        if (state == GameState.NEW && !gameRoles.contains(role) && !role.isDefault) {
-            gameRoles.add(role);
+        if (state == GameState.NEW && !allGameRoles.contains(role) && !role.isDefault) {
+            allGameRoles.add(role);
         }
     }
 
     public boolean removeRole(GameRole role) {
-        return state == GameState.NEW && gameRoles.remove(role);
+        return state == GameState.NEW && allGameRoles.remove(role);
     }
 
     public List<GameRole> getRolesForPlayer(User player) {
         return playerToRolesMap.get(player);
     }
-    
+
     @Override
     public String toString() {
         return String.format("State:[%s] Map:%s", state.toString(), playerToRolesMap.toString());
