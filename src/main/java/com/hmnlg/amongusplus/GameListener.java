@@ -463,19 +463,28 @@ public class GameListener extends ListenerAdapter {
             if (readyRole != null) {
                 try {
                     if (game.attemptGameStartWithRoleAssignment(sourceMessage.getAuthor(), readyRole)) {
-
                         // Everyone is ready, time to start the game.
-                        game.giveOutNondefaultRoles();
-
-                        // Send role assignment message for non default roles and send everyone a game starting message
-                        game.getAllPlayers().forEach(player -> {
-                            player.openPrivateChannel().queue((channel) -> {
-                                game.getRolesForPlayer(player).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
-                                    channel.sendMessage(role.assignmentMessage).queue();
+                        try {
+                            Map<User, List<GameRole>> roleMap = game.giveOutNondefaultRoles();
+                            
+                            // Send role assignment message for non default roles and send everyone a game starting message
+                            game.getAllPlayers().forEach(player -> {
+                                player.openPrivateChannel().queue((channel) -> {
+                                    game.getRolesForPlayer(player).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
+                                        channel.sendMessage(role.assignmentMessage).queue();
+                                    });
+                                    channel.sendMessage("Everyone's in! Game is starting.").queue();
                                 });
-                                channel.sendMessage("Everyone's in! Game is starting.").queue();
                             });
-                        });
+
+                            // Send a debug message
+                            if (debug) {
+                                Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
+                            }
+                        } catch (GeneralGameException err) {
+                            sendErrorResponse(sourceMessage, err.getMessage());
+                            Logger.getLogger(GameListener.class.getName()).log(Level.WARNING, err.getMessage());
+                        }
                     } else {
                         sourceMessage.getChannel().sendMessage("You're in. Waiting on others to ready up.").queue();
                     }

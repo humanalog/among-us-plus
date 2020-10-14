@@ -21,7 +21,7 @@ import org.joda.time.Instant;
  * @author maikotui
  */
 public class GameManager {
-    
+
     /**
      * The main list of players and the roles that each player holds
      */
@@ -36,7 +36,7 @@ public class GameManager {
      * The current state of the game
      */
     private GameState state;
-    
+
     private Instant stateChangeTime;
 
     // Flags to keep track of when an action is used (and only has one use)
@@ -62,11 +62,11 @@ public class GameManager {
         state = GameState.NEW;
         stateChangeTime = new Instant();
     }
-    
+
     public boolean isActive() {
         return state == GameState.ACTIVE;
     }
-    
+
     public Instant getLastGameStateChangeTime() {
         return stateChangeTime;
     }
@@ -125,17 +125,51 @@ public class GameManager {
         throw new GeneralGameException("I'm not expecting a role assignment from you.");
     }
 
-    public void giveOutNondefaultRoles() {
-        Random rand = new Random();
-        List<User> allPlayers = getAllPlayers();
+    public Map<User, List<GameRole>> giveOutNondefaultRoles() throws GeneralGameException {
+        for (GameRole assignableRole : gameRoles) {
+            User assignableUser = getUserWhoCanAcceptRole(getAllPlayers(), assignableRole);
+            if (assignableUser != null) {
+                playerToRolesMap.get(assignableUser).add(assignableRole);
+            } else {
+                throw new GeneralGameException(String.format("Could not find a player to assign %s.", assignableRole.name));
+            }
+        }
 
-        gameRoles.forEach(assignableRole -> {
-            User userToGiveRole = allPlayers.remove(rand.nextInt(allPlayers.size()));
-            playerToRolesMap.get(userToGiveRole).add(assignableRole);
-        });
+        return new HashMap<>(playerToRolesMap);
     }
 
-    public void resetGame(){
+    private User getUserWhoCanAcceptRole(List<User> playerList, GameRole targetRole) {
+        // For generating a random value to pick a random player
+        Random rand = new Random();
+        
+        // The user that can accept the targetRole
+        User userToGiveRole = null;
+        
+        // If an acceptable player has been found
+        boolean foundAcceptablePlayer = false;
+
+        do {
+            // Get a random player from the player list
+            // Remove them so we don't get any repeats
+            userToGiveRole = playerList.remove(rand.nextInt(playerList.size())); // Get a random user and remove them from the list (so they can't be picked again)
+
+            // Assume we found an acceptable player
+            foundAcceptablePlayer = true;
+
+            // Check if player is really acceptable
+            for (GameRole activeUserRole : playerToRolesMap.get(userToGiveRole)) { // For each role the user already has
+                for (int unstackableRoleId : targetRole.unstackableRoleIds) { // For each unstackableRoleId
+                    if (activeUserRole.id == unstackableRoleId) { // If a role the player has is an unstackable role for this game role, retry
+                        foundAcceptablePlayer = false;
+                    }
+                }
+            }
+        } while (!playerList.isEmpty() && !foundAcceptablePlayer);
+
+        return userToGiveRole;
+    }
+
+    public void resetGame() {
         // Clear roles
         Set<User> userSet = new HashSet<>(playerToRolesMap.keySet());
         playerToRolesMap.clear();
@@ -204,7 +238,7 @@ public class GameManager {
     public List<GameRole> getRolesForPlayer(User player) {
         return playerToRolesMap.get(player);
     }
-    
+
     @Override
     public String toString() {
         return String.format("State:[%s] Map:%s", state.toString(), playerToRolesMap.toString());
