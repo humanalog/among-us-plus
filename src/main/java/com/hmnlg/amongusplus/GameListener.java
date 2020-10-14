@@ -342,7 +342,7 @@ public class GameListener extends ListenerAdapter {
         switch (game.getState()) {
             case NEW -> {
                 if (updateText.contains("\u2705")) { // Checkmark
-                    startGame(game);
+                    game.displayMessge.clearReactions().queue((obj) -> startGame(game));
                 }
             }
             case PREGAME -> {
@@ -352,7 +352,7 @@ public class GameListener extends ListenerAdapter {
                 } else if (updateText.contains("\uD83C\uDDEE")) { // I
                     chosenRole = this.imposterRole;
                 }
-                
+
                 readyUp(updater, chosenRole, game);
             }
             case ACTIVE -> {
@@ -511,6 +511,7 @@ public class GameListener extends ListenerAdapter {
                 eb.addField("Choose Your Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
 
                 eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
                 game.displayMessge.editMessage(eb.build()).queue((message) -> {
                     message.addReaction("\uD83C\uDDE8").queue(); // C
                     message.addReaction("\uD83C\uDDEE").queue(); // I
@@ -525,32 +526,32 @@ public class GameListener extends ListenerAdapter {
 
     private void readyUp(User user, GameRole chosenRole, GameManager game) {
         if (chosenRole != null) {
-                    try {
-                        if (game.attemptGameStartWithRoleAssignment(user, chosenRole)) {
-                            Map<User, List<GameRole>> roleMap = game.giveOutNondefaultRoles();
+            try {
+                if (game.attemptGameStartWithRoleAssignment(user, chosenRole)) {
+                    Map<User, List<GameRole>> roleMap = game.giveOutNondefaultRoles();
 
-                            // Send role assignment message for non default roles and send everyone a game starting message
-                            game.getAllPlayers().forEach(player -> {
-                                player.openPrivateChannel().queue((channel) -> {
-                                    game.getRolesForPlayer(player).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
-                                        channel.sendMessage(role.assignmentMessage).queue(); // TODO: Move to embed instead of messaging
-                                    });
-                                });
+                    // Send role assignment message for non default roles and send everyone a game starting message
+                    game.getAllPlayers().forEach(player -> {
+                        player.openPrivateChannel().queue((channel) -> {
+                            game.getRolesForPlayer(player).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
+                                channel.sendMessage(role.assignmentMessage).queue(); // TODO: Move to embed instead of messaging
                             });
+                        });
+                    });
 
-                            // TODO: Update embed message to show that the game has been started
-                            // Send a debug message
-                            if (debug) {
-                                Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
-                            }
-                        } else {
-                            // TODO: Update embed message to show player joined
-                        }
-                    } catch (GeneralGameException ex) {
-                        Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
-                        // TODO: do something when error occurs
+                    // TODO: Update embed message to show that the game has been started
+                    // Send a debug message
+                    if (debug) {
+                        Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
                     }
+                } else {
+                    // TODO: Update embed message to show player joined
                 }
+            } catch (GeneralGameException ex) {
+                Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
+                // TODO: do something when error occurs
+            }
+        }
     }
 
     private void useVeto(Message sourceMessage, GameManager game) {
