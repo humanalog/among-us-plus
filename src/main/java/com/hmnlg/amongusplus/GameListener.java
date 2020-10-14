@@ -232,89 +232,168 @@ public class GameListener extends ListenerAdapter {
 //                }
 //            }
             // Reset command
-            if (content.equals(prefix + "reset")) {
-                GameManager game = findGameForUser(event.getAuthor());
-                if (game != null) {
-                    game.resetGame();
-                    sendResponse(event.getMessage(), "Game has been reset.");
-                } else {
-                    sendErrorResponse(event.getMessage(), "You are not in a game.");
-                }
-            }
-
+//            if (content.equals(prefix + "reset")) {
+//                GameManager game = findGameForUser(event.getAuthor());
+//                if (game != null) {
+//                    game.resetGame();
+//                    sendResponse(event.getMessage(), "Game has been reset.");
+//                } else {
+//                    sendErrorResponse(event.getMessage(), "You are not in a game.");
+//                }
+//            }
             if (content.equals(prefix + "stop")) {
-                if (gameDB.values().removeIf(game -> game.getAllPlayers().contains(event.getAuthor()))) {
-                    sendResponse(event.getMessage(), "Stopped game.");
+                GameManager gameToRemove = gameDB.get(event.getAuthor());
+                if (gameToRemove != null) {
+                    if (gameToRemove.displayMessge != null) {
+                        List<MessageEmbed> gameMessageEmbeds = gameToRemove.displayMessge.getEmbeds();
+                        if (!gameMessageEmbeds.isEmpty()) {
+                            MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+
+                            EmbedBuilder eb = new EmbedBuilder();
+                            eb.setColor(Color.RED);
+                            eb.setTitle(originalEmbed.getTitle());
+                            eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                            eb.addField("Game is over", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
+
+                            eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                            gameToRemove.displayMessge.editMessage(eb.build()).queue();
+                        }
+                    }
+
+                    // Remove game from database
+                    gameDB.remove(event.getAuthor());
                 } else {
                     sendErrorResponse(event.getMessage(), "You are not in a game.");
                 }
             }
 
-            if (content.startsWith(prefix + "padd") && debug) {
-                GameManager game = findGameForUser(event.getAuthor());
+            if (content.startsWith(prefix + "padd")) {
+                // Ensure there is a player name provided
+                if (content.length() < 5) {
+                    sendErrorResponse(event.getMessage(), "Please specify a player to add.");
+                }
+
+                // Get the game the author is the owner of
+                GameManager game = gameDB.get(event.getAuthor());
                 if (game != null) {
-                    String[] postCommandArgs = event.getMessage().getContentRaw().substring((prefix + "padd").length() + 1).split(" ");
-                    if (postCommandArgs.length > 0) {
-                        User user = findUserInGuild(event.getGuild(), postCommandArgs[0]);
+                    // Parse the name provided
+                    String nameToAdd = content.substring((prefix + "padd").length() + 1);
+                    User user = findUserInGuild(event.getGuild(), nameToAdd);
+
+                    // Add the player
+                    if (user != null) {
                         game.addPlayer(user);
-                        sendResponse(event.getMessage(), "Added " + user.getName() + " to the game.");
+                        refreshNewGameMessage(game);
                     }
                 } else {
-                    sendErrorResponse(event.getMessage(), "You are not in a game.");
+                    sendErrorResponse(event.getMessage(), "You are not the owner of any active games.");
                 }
             }
 
-            if (content.startsWith(prefix + "prem") && debug) {
-                GameManager game = findGameForUser(event.getAuthor());
+            if (content.startsWith(prefix + "prem")) {
+                // Ensure there is a player name provided
+                if (content.length() < 5) {
+                    sendErrorResponse(event.getMessage(), "Please specify a player to remove.");
+                }
+
+                // Get the game the author is the owner of
+                GameManager game = gameDB.get(event.getAuthor());
                 if (game != null) {
-                    String[] postCommandArgs = event.getMessage().getContentRaw().substring((prefix + "padd").length() + 1).split(" ");
-                    if (postCommandArgs.length > 0) {
-                        User user = findUserInGuild(event.getGuild(), postCommandArgs[0]);
-                        game.removePlayer(user);
-                        sendResponse(event.getMessage(), "Added " + user.getName() + " to the game.");
+                    // Parse the name provided
+                    String playerToRemove = content.substring((prefix + "padd").length() + 1);
+                    User user = findUserInGuild(event.getGuild(), playerToRemove);
+
+                    // Remove the player
+                    if (user != null) {
+                        if (game.removePlayer(user)) {
+                            refreshNewGameMessage(game);
+                        }
                     }
                 } else {
-                    sendErrorResponse(event.getMessage(), "You are not in a game.");
+                    sendErrorResponse(event.getMessage(), "You are not the owner of any active games.");
                 }
             }
 
-            if (content.startsWith(prefix + "radd") && debug) {
-                GameManager game = findGameForUser(event.getAuthor());
+            if (content.startsWith(prefix + "radd")) {
+                if (content.length() < 5) {
+                    sendErrorResponse(event.getMessage(), "Please specify a role to add.");
+                }
+
+                // Get the game the author is the owner of
+                GameManager game = gameDB.get(event.getAuthor());
                 if (game != null) {
-                    String[] postCommandArgs = event.getMessage().getContentRaw().substring((prefix + "radd").length() + 1).split(" ");
-                    if (postCommandArgs.length > 0) {
-                        GameRole role = findRoleFromString(postCommandArgs[0]);
+                    // Parse the role provided
+                    String roleToAdd = content.substring((prefix + "padd").length() + 1);
+                    GameRole role = findRoleFromString(roleToAdd);
+
+                    // Add the role
+                    if (role != null) {
                         game.addRole(role);
-                        sendResponse(event.getMessage(), "Added role '" + role.name + "' to the game.");
+                        refreshNewGameMessage(game);
                     }
+
                 } else {
-                    sendErrorResponse(event.getMessage(), "You are not in a game.");
+                    sendErrorResponse(event.getMessage(), "You are not the owner of any active games.");
                 }
             }
 
-            if (content.startsWith(prefix + "rrem") && debug) {
-                GameManager game = findGameForUser(event.getAuthor());
+            if (content.startsWith(prefix + "rrem")) {
+                if (content.length() < 5) {
+                    sendErrorResponse(event.getMessage(), "Please specify a role to add.");
+                }
+
+                // Get the game the author is the owner of
+                GameManager game = gameDB.get(event.getAuthor());
                 if (game != null) {
-                    String[] postCommandArgs = event.getMessage().getContentRaw().substring((prefix + "radd").length() + 1).split(" ");
-                    if (postCommandArgs.length > 0) {
-                        GameRole role = findRoleFromString(postCommandArgs[0]);
-                        game.removeRole(role);
-                        sendResponse(event.getMessage(), "Removes role '" + role.name + "' to the game.");
+                    // Parse the role provided
+                    String roleToRemove = content.substring((prefix + "padd").length() + 1);
+                    GameRole role = findRoleFromString(roleToRemove);
+
+                    // Add the role
+                    if (role != null) {
+                        if (game.removeRole(role)) {
+                            refreshNewGameMessage(game);
+                        }
                     }
+
                 } else {
-                    sendErrorResponse(event.getMessage(), "You are not in a game.");
+                    sendErrorResponse(event.getMessage(), "You are not the owner of any active games.");
                 }
             }
+        }
+    }
 
-            if (content.equals(prefix + "plist")) {
-                GameManager game = findGameForUser(event.getAuthor());
-                if (game != null) {
-                    String playerList = "Player List:\n";
-                    playerList = game.getAllPlayers().stream().map(user -> user.getName() + "\n").reduce(playerList, String::concat);
-                    sendResponse(event.getMessage(), playerList);
-                } else {
-                    sendErrorResponse(event.getMessage(), "You are not in a game.");
+    private void refreshNewGameMessage(GameManager game) {
+        if (game.displayMessge != null) {
+            List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+            if (!gameMessageEmbeds.isEmpty()) {
+                MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+
+                EmbedBuilder eb = new EmbedBuilder();
+                eb.setColor(Color.RED);
+                eb.setTitle(originalEmbed.getTitle());
+                eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                StringBuilder sb = new StringBuilder();
+                for (GameRole role : game.allGameRoles) {
+                    sb.append(String.format("> __%s__:\n> ```%s```\n", role.name, role.description));
                 }
+                eb.addField("Roles:", sb.toString(), true);
+
+                sb = new StringBuilder();
+                for (User user : game.getAllPlayers()) {
+                    sb.append(user.getAsMention());
+                    sb.append("\n");
+                }
+                eb.addField("Players", String.format(">>> %s", sb.toString()), true);
+
+                eb.addField("What Next?", "To add or remove players, use the ***padd*** or ***prem*** commands.\nTo add or remove roles, use the ***radd*** or ***rrem*** commands.\nTo start the game, click on the \u2705 emote.", false);
+
+                eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                game.displayMessge.editMessage(eb.build()).queue();
             }
         }
     }
@@ -356,6 +435,11 @@ public class GameListener extends ListenerAdapter {
                 readyUp(updater, chosenRole, game);
             }
             case ACTIVE -> {
+                if (updateText.contains("\uD83D\uDD04")) { // Restart command
+                    game.resetGame();
+                } else if (updateText.contains("\uD83D\uDED1")) { // Stop command
+
+                }
             }
             default -> {
             }
@@ -420,6 +504,7 @@ public class GameListener extends ListenerAdapter {
     private void createGame(Message sourceMessage) {
         if (gameDB.containsKey(sourceMessage.getAuthor())) {
             sendErrorResponse(sourceMessage, "You are already the creator of another game.");
+            return;
         }
 
         // Create the list of game members and add the author of the message as a member
@@ -452,7 +537,7 @@ public class GameListener extends ListenerAdapter {
         }
 
         EmbedBuilder eb = new EmbedBuilder();
-        eb.setColor(Color.red);
+        eb.setColor(Color.green);
         eb.setTitle(String.format("Among Us+ Game", sourceMessage.getAuthor().getName()));
         eb.setAuthor("Among Us+ Bot", "https://github.com/humanalog/among-us-plus/", sourceMessage.getJDA().getSelfUser().getAvatarUrl());
 
@@ -502,7 +587,7 @@ public class GameListener extends ListenerAdapter {
             if (!gameMessageEmbeds.isEmpty()) {
                 MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
                 EmbedBuilder eb = new EmbedBuilder();
-                eb.setColor(Color.red);
+                eb.setColor(Color.green);
                 eb.setTitle(originalEmbed.getTitle());
                 eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
 
@@ -569,7 +654,7 @@ public class GameListener extends ListenerAdapter {
                         if (!gameMessageEmbeds.isEmpty()) {
                             MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
                             EmbedBuilder eb = new EmbedBuilder();
-                            eb.setColor(Color.red);
+                            eb.setColor(Color.green);
                             eb.setTitle(originalEmbed.getTitle());
                             eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
 
@@ -594,7 +679,7 @@ public class GameListener extends ListenerAdapter {
                     if (!gameMessageEmbeds.isEmpty()) {
                         MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
                         EmbedBuilder eb = new EmbedBuilder();
-                        eb.setColor(Color.red);
+                        eb.setColor(Color.green);
                         eb.setTitle(originalEmbed.getTitle());
                         eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
 

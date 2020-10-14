@@ -34,7 +34,7 @@ public class GameManager {
     /**
      * A list of all roles that are usable for this game
      */
-    private final List<GameRole> gameRoles;
+    public final List<GameRole> allGameRoles;
 
     /**
      * The current state of the game
@@ -61,7 +61,7 @@ public class GameManager {
             playerToRolesMap.put(player, new ArrayList<>());
         });
 
-        this.gameRoles = usableNondefaultRoles;
+        this.allGameRoles = usableNondefaultRoles;
 
         state = GameState.NEW;
         stateChangeTime = new Instant();
@@ -138,7 +138,7 @@ public class GameManager {
     }
 
     public Map<User, List<GameRole>> giveOutNondefaultRoles() throws GeneralGameException {
-        for (GameRole assignableRole : gameRoles) {
+        for (GameRole assignableRole : allGameRoles) {
             User assignableUser = getUserWhoCanAcceptRole(getAllPlayers(), assignableRole);
             if (assignableUser != null) {
                 playerToRolesMap.get(assignableUser).add(assignableRole);
@@ -238,13 +238,13 @@ public class GameManager {
     }
 
     public void addRole(GameRole role) {
-        if (state == GameState.NEW && !gameRoles.contains(role) && !role.isDefault) {
-            gameRoles.add(role);
+        if (state == GameState.NEW && !allGameRoles.contains(role) && !role.isDefault) {
+            allGameRoles.add(role);
         }
     }
 
     public boolean removeRole(GameRole role) {
-        return state == GameState.NEW && gameRoles.remove(role);
+        return state == GameState.NEW && allGameRoles.remove(role);
     }
 
     public List<GameRole> getRolesForPlayer(User player) {
