@@ -12,7 +12,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.logging.Level;
@@ -222,14 +221,17 @@ public class GameListener extends ListenerAdapter {
                 createGame(event.getMessage());
             }
 
+            // Stop command
             if (content.equals(prefix + "stop")) {
                 tryDeleteUsersGame(event.getAuthor());
             }
 
+            // Add player command
             if (content.startsWith(prefix + "padd")) {
                 // Ensure there is a player name provided
-                if (content.length() < 5) {
+                if (content.length() < (prefix + "padd").length() + 1) {
                     sendErrorResponse(event.getMessage(), "Please specify a player to add.");
+                    return;
                 }
 
                 // Get the game the author is the owner of
@@ -248,18 +250,19 @@ public class GameListener extends ListenerAdapter {
                     sendErrorResponse(event.getMessage(), "You are not the owner of any active games.");
                 }
             }
-
+            
             if (content.startsWith(prefix + "prem")) {
                 // Ensure there is a player name provided
-                if (content.length() < 5) {
+                if (content.length() < (prefix + "prem").length() + 1) {
                     sendErrorResponse(event.getMessage(), "Please specify a player to remove.");
+                    return;
                 }
 
                 // Get the game the author is the owner of
                 GameManager game = gameDB.get(event.getAuthor());
                 if (game != null) {
                     // Parse the name provided
-                    String playerToRemove = content.substring((prefix + "padd").length() + 1);
+                    String playerToRemove = content.substring((prefix + "prem").length() + 1);
                     User user = findUserInGuild(event.getGuild(), playerToRemove);
 
                     // Remove the player
@@ -274,15 +277,16 @@ public class GameListener extends ListenerAdapter {
             }
 
             if (content.startsWith(prefix + "radd")) {
-                if (content.length() < 5) {
+                if (content.length() < (prefix + "radd").length() + 1) {
                     sendErrorResponse(event.getMessage(), "Please specify a role to add.");
+                    return;
                 }
 
                 // Get the game the author is the owner of
                 GameManager game = gameDB.get(event.getAuthor());
                 if (game != null) {
                     // Parse the role provided
-                    String roleToAdd = content.substring((prefix + "padd").length() + 1);
+                    String roleToAdd = content.substring((prefix + "radd").length() + 1);
                     GameRole role = findRoleFromString(roleToAdd);
 
                     // Add the role
@@ -297,15 +301,16 @@ public class GameListener extends ListenerAdapter {
             }
 
             if (content.startsWith(prefix + "rrem")) {
-                if (content.length() < 5) {
+                if (content.length() < (prefix + "rrem").length() + 1) {
                     sendErrorResponse(event.getMessage(), "Please specify a role to add.");
+                    return;
                 }
 
                 // Get the game the author is the owner of
                 GameManager game = gameDB.get(event.getAuthor());
                 if (game != null) {
                     // Parse the role provided
-                    String roleToRemove = content.substring((prefix + "padd").length() + 1);
+                    String roleToRemove = content.substring((prefix + "rrem").length() + 1);
                     GameRole role = findRoleFromString(roleToRemove);
 
                     // Add the role
@@ -329,7 +334,7 @@ public class GameListener extends ListenerAdapter {
                 MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
 
                 EmbedBuilder eb = new EmbedBuilder();
-                eb.setColor(Color.RED);
+                eb.setColor(originalEmbed.getColor());
                 eb.setTitle(originalEmbed.getTitle());
                 eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
 
