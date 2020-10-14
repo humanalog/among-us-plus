@@ -21,7 +21,6 @@ import net.dv8tion.jda.core.entities.Guild;
 import net.dv8tion.jda.core.entities.Member;
 import net.dv8tion.jda.core.entities.Message;
 import net.dv8tion.jda.core.entities.MessageEmbed;
-import net.dv8tion.jda.core.entities.MessageReaction;
 import net.dv8tion.jda.core.entities.User;
 import net.dv8tion.jda.core.entities.VoiceChannel;
 import net.dv8tion.jda.core.events.message.MessageReceivedEvent;
@@ -301,13 +300,13 @@ public class GameListener extends ListenerAdapter {
                     String playerToRemove = content.substring(prefix.length() + 5);
                     User user = findUserInGuild(event.getGuild(), playerToRemove);
 
-                    if (user.equals(event.getAuthor())) {
-                        sendErrorResponse(event.getMessage(), "You can't remove yourself from the game since you're the game leader.");
-                        return;
-                    }
-
                     // Remove the player
                     if (user != null) {
+                        if (user.equals(event.getAuthor())) {
+                            sendErrorResponse(event.getMessage(), "You can't remove yourself from the game since you're the game leader.");
+                            return;
+                        }
+
                         if (game.removePlayer(user)) {
                             refreshNewGameMessage(game);
                         }
@@ -756,7 +755,7 @@ public class GameListener extends ListenerAdapter {
                 }
             } catch (GeneralGameException ex) {
                 Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
-                if(game.displayMessge != null ){
+                if (game.displayMessge != null) {
                     game.displayMessge.getChannel().sendMessage(ex.getMessage()).queue();
                 }
                 this.tryDeleteUsersGame(user);

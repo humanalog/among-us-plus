@@ -128,7 +128,7 @@ public class GameManager {
     }
 
     public List<User> getPlayersWithoutRoles() {
-        List<User> list = new ArrayList<User>();
+        List<User> list = new ArrayList<>();
         for (Entry<User, List<GameRole>> entry : playerToRolesMap.entrySet()) {
             if (entry.getValue().isEmpty()) {
                 list.add(entry.getKey());
@@ -165,7 +165,7 @@ public class GameManager {
         User userToGiveRole = null;
 
         // If an acceptable player has been found
-        boolean foundAcceptablePlayer = false;
+        boolean foundAcceptablePlayer;
 
         do {
             // Get a random player from the player list
