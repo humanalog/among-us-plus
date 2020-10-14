@@ -297,7 +297,7 @@ public class GameListener extends ListenerAdapter {
     public void onMessageReactionAdd(MessageReactionAddEvent event) {
         event.getChannel().getMessageById(event.getMessageId()).queue(message -> {
             if (message.getAuthor().equals(event.getJDA().getSelfUser())) { // If message is from this bot
-                if (!event.getUser().equals(event.getJDA().getSelfUser())) {
+                if (!event.getUser().equals(event.getJDA().getSelfUser())) { // If a user other than this bot reacted to a message
                     String reaction = event.getReactionEmote().getName();
                     if (reaction.contains("\uD83C\uDDE8")) { // C
                         System.out.println("C");
@@ -305,6 +305,36 @@ public class GameListener extends ListenerAdapter {
                         System.out.println("I");
                     }
 
+//                    try {
+//                    if (game.attemptGameStartWithRoleAssignment(sourceMessage.getAuthor(), readyRole)) {
+//                        // Everyone is ready, time to start the game.
+//                        try {
+//                            Map<User, List<GameRole>> roleMap = game.giveOutNondefaultRoles();
+//
+//                            // Send role assignment message for non default roles and send everyone a game starting message
+//                            game.getAllPlayers().forEach(player -> {
+//                                player.openPrivateChannel().queue((channel) -> {
+//                                    game.getRolesForPlayer(player).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
+//                                        channel.sendMessage(role.assignmentMessage).queue();
+//                                    });
+//                                    channel.sendMessage("Everyone's in! Game is starting.").queue();
+//                                });
+//                            });
+//
+//                            // Send a debug message
+//                            if (debug) {
+//                                Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
+//                            }
+//                        } catch (GeneralGameException err) {
+//                            sendErrorResponse(sourceMessage, err.getMessage());
+//                            Logger.getLogger(GameListener.class.getName()).log(Level.WARNING, err.getMessage());
+//                        }
+//                    } else {
+//                        sourceMessage.getChannel().sendMessage("You're in. Waiting on others to ready up.").queue();
+//                    }
+//                } catch (GeneralGameException err) {
+//                    sourceMessage.getChannel().sendMessage(err.getMessage()).queue();
+//                }
                     event.getReaction().removeReaction(event.getUser()).queue();
                 }
             }
@@ -366,15 +396,27 @@ public class GameListener extends ListenerAdapter {
      * @param event Message received event that issued the command
      */
     private void createGame(Message sourceMessage) {
-        // Send starting message
-        sendResponse(sourceMessage, String.format("Creating game for %s", sourceMessage.getAuthor().getAsMention()));
+        // Create the list of game members and add the author of the message as a member
+        ArrayList<User> gameMembers = new ArrayList<>();
+        gameMembers.add(sourceMessage.getAuthor());
 
-        // Parse command for roles
+        // Parse out the arguments given
         HashSet<GameRole> rolesForThisGame = new HashSet<>();
         if (sourceMessage.getContentRaw().length() > (prefix + "create").length()) {
             String[] postCommandArgs = sourceMessage.getContentRaw().substring((prefix + "create").length() + 1).split(" ");
-            for (String roleString : postCommandArgs) {
-                GameRole role = findRoleFromString(roleString);
+            for (String arg : postCommandArgs) {
+                if (arg == "auto") {
+                    // Get a list of gamemembers and their names
+                    VoiceChannel vc = sourceMessage.getMember().getVoiceState().getChannel();
+                    if (vc != null) {
+                        for (Member vcMember : vc.getMembers()) {
+                            if (!vcMember.getUser().equals(sourceMessage.getAuthor())) {
+                                gameMembers.add(vcMember.getUser());
+                            }
+                        }
+                    }
+                }
+                GameRole role = findRoleFromString(arg);
                 if (role != null && !role.isDefault) {
                     rolesForThisGame.add(role);
                 }
@@ -384,16 +426,6 @@ public class GameListener extends ListenerAdapter {
             sendErrorResponse(sourceMessage, "Please include additional roles to assign. Use the roles command for more info.");
             return;
         }
-
-//        // Get a list of gamemembers and their names
-//        ArrayList<User> gameMembers = new ArrayList<>();
-//        String playerList = "";
-//        playerList = vc.getMembers().stream().map(member -> {
-//            gameMembers.add(member.getUser());
-//            return member;
-//        }).map(member -> member.getUser().getName() + "\n").reduce(playerList, String::concat);
-        ArrayList<User> gameMembers = new ArrayList<>();
-        gameMembers.add(sourceMessage.getAuthor());
 
         EmbedBuilder eb = new EmbedBuilder();
         eb.setColor(Color.red);
