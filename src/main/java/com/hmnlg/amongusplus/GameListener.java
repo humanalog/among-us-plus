@@ -547,22 +547,19 @@ public class GameListener extends ListenerAdapter {
         if (sourceMessage.getContentRaw().length() > (prefix + "create").length()) {
             String[] postCommandArgs = sourceMessage.getContentRaw().substring((prefix + "create").length() + 1).split(" ");
             for (String arg : postCommandArgs) {
-                if (arg.equals("auto")) {
-                    // Add all users from voice chat except for the author to the game
-                    VoiceChannel vc = sourceMessage.getMember().getVoiceState().getChannel();
-                    if (vc != null) {
-                        for (Member vcMember : vc.getMembers()) {
-                            if (!vcMember.getUser().equals(sourceMessage.getAuthor())) {
-                                gameMembers.add(vcMember.getUser());
-                            }
-                        }
-                    }
-                    continue;
-                }
-
                 GameRole role = findRoleFromString(arg);
                 if (role != null && !role.isDefault) {
                     rolesForThisGame.add(role);
+                }
+            }
+        }
+
+        // Add all users from voice chat except for the author to the game
+        VoiceChannel vc = sourceMessage.getMember().getVoiceState().getChannel();
+        if (vc != null) {
+            for (Member vcMember : vc.getMembers()) {
+                if (!vcMember.getUser().equals(sourceMessage.getAuthor())) {
+                    gameMembers.add(vcMember.getUser());
                 }
             }
         }
