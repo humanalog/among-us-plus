@@ -1,7 +1,18 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
+ * Copyright (C) 2020 maikotui
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package com.hmnlg.amongusplus;
 
@@ -21,7 +32,6 @@ import net.dv8tion.jda.core.entities.Guild;
 import net.dv8tion.jda.core.entities.Member;
 import net.dv8tion.jda.core.entities.Message;
 import net.dv8tion.jda.core.entities.MessageEmbed;
-import net.dv8tion.jda.core.entities.MessageReaction;
 import net.dv8tion.jda.core.entities.User;
 import net.dv8tion.jda.core.entities.VoiceChannel;
 import net.dv8tion.jda.core.events.message.MessageReceivedEvent;
@@ -301,13 +311,13 @@ public class GameListener extends ListenerAdapter {
                     String playerToRemove = content.substring(prefix.length() + 5);
                     User user = findUserInGuild(event.getGuild(), playerToRemove);
 
-                    if (user.equals(event.getAuthor())) {
-                        sendErrorResponse(event.getMessage(), "You can't remove yourself from the game since you're the game leader.");
-                        return;
-                    }
-
                     // Remove the player
                     if (user != null) {
+                        if (user.equals(event.getAuthor())) {
+                            sendErrorResponse(event.getMessage(), "You can't remove yourself from the game since you're the game leader.");
+                            return;
+                        }
+
                         if (game.removePlayer(user)) {
                             refreshNewGameMessage(game);
                         }
@@ -368,39 +378,12 @@ public class GameListener extends ListenerAdapter {
         }
     }
 
-    private void refreshNewGameMessage(GameManager game) {
-        if (game.displayMessge != null) {
-            List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
-            if (!gameMessageEmbeds.isEmpty()) {
-                MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
-
-                EmbedBuilder eb = new EmbedBuilder();
-                eb.setColor(originalEmbed.getColor());
-                eb.setTitle(originalEmbed.getTitle());
-                eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
-
-                StringBuilder sb = new StringBuilder();
-                for (GameRole role : game.allGameRoles) {
-                    sb.append(String.format("> __%s__:\n> ```%s```\n", role.name, role.description));
-                }
-                eb.addField("Roles:", sb.toString(), true);
-
-                sb = new StringBuilder();
-                for (User user : game.getAllPlayers()) {
-                    sb.append(user.getAsMention());
-                    sb.append("\n");
-                }
-                eb.addField("Players", String.format(">>> %s", sb.toString()), true);
-
-                eb.addField("What Next?", "To add or remove players, use the ***padd*** or ***prem*** commands.\nTo add or remove roles, use the ***radd*** or ***rrem*** commands.\nTo start the game, click on the \u2705 emote.", false);
-
-                eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
-
-                game.displayMessge.editMessage(eb.build()).queue();
-            }
-        }
-    }
-
+    /**
+     * Triggered when a new reaction is added in a Guild that the Bot is in.
+     * Used to interact with chat.
+     *
+     * @param event
+     */
     @Override
     public void onMessageReactionAdd(MessageReactionAddEvent event) {
         event.getChannel().getMessageById(event.getMessageId()).queue(message -> {
@@ -420,6 +403,62 @@ public class GameListener extends ListenerAdapter {
         });
     }
 
+    /**
+     * Ran every time a private message is received.
+     *
+     * @param event Information regarding the message received
+     */
+    @Override
+    public void onPrivateMessageReceived(PrivateMessageReceivedEvent event) {
+        // Ready up moved to embed reaction
+//        // Ready up message
+//        if (event.getMessage().getContentRaw().startsWith("ready")) {
+//            GameManager game = findGameForUser(event.getAuthor());
+//            if (game != null) {
+//                readyUp(event.getMessage(), game);
+//            } else {
+//                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
+//            }
+//        }
+
+        // Veto command
+        if (event.getMessage().getContentRaw().startsWith("veto")) {
+            GameManager game = gameDB.get(event.getAuthor());
+            if (game != null) {
+                useVeto(event.getMessage(), game);
+            } else {
+                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
+            }
+        }
+
+        // Execute command
+        if (event.getMessage().getContentRaw().startsWith("execute")) {
+            GameManager game = gameDB.get(event.getAuthor());
+            if (game != null) {
+                useExecute(event.getMessage(), game);
+            } else {
+                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
+            }
+        }
+
+        // Detective command
+        if (event.getMessage().getContentRaw().startsWith("detect")) {
+            GameManager game = gameDB.get(event.getAuthor());
+            if (game != null) {
+                useDetect(event.getMessage(), game);
+            } else {
+                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
+            }
+        }
+    }
+
+    /**
+     * Triggered when a display message is updated with a reaction.
+     *
+     * @param updater
+     * @param updateText
+     * @param game
+     */
     private void onDisplayMessageUpdate(User updater, String updateText, GameManager game) {
         switch (game.getState()) {
             case NEW -> {
@@ -449,84 +488,40 @@ public class GameListener extends ListenerAdapter {
         }
     }
 
-    private boolean tryDeleteUsersGame(User user) {
-        GameManager game = gameDB.get(user);
-        if (game == null) {
-            return false;
-        }
-
-        // Update the display message if the game has it
-        if (game.displayMessge != null) {
-            game.displayMessge.clearReactions().queue((obj) -> {
-                List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
-                if (!gameMessageEmbeds.isEmpty()) {
-                    MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
-
-                    EmbedBuilder eb = new EmbedBuilder();
-                    eb.setColor(Color.RED);
-                    eb.setTitle(originalEmbed.getTitle());
-                    eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
-
-                    eb.addField("Game has been stopped.", "Thanks for playing!", false);
-
-                    eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
-
-                    game.displayMessge.editMessage(eb.build()).queue();
-                }
-            });
-        }
-
-        // Remove game from database
-        gameDB.remove(user);
-
-        return true;
-    }
-
     /**
-     * Ran every time a private message is received.
+     * Refreshes the game message (only works for games with "New" state).
      *
-     * @param event Information regarding the message received
+     * @param game
      */
-    @Override
-    public void onPrivateMessageReceived(PrivateMessageReceivedEvent event) {
-        // Ready up moved to embed reaction
-//        // Ready up message
-//        if (event.getMessage().getContentRaw().startsWith("ready")) {
-//            GameManager game = findGameForUser(event.getAuthor());
-//            if (game != null) {
-//                readyUp(event.getMessage(), game);
-//            } else {
-//                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
-//            }
-//        }
+    private void refreshNewGameMessage(GameManager game) {
+        if (game.displayMessge != null) {
+            List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+            if (!gameMessageEmbeds.isEmpty()) {
+                MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
 
-        // Veto command
-        if (event.getMessage().getContentRaw().startsWith("veto")) {
-            GameManager game = findGameForUser(event.getAuthor());
-            if (game != null) {
-                useVeto(event.getMessage(), game);
-            } else {
-                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
-            }
-        }
+                EmbedBuilder eb = new EmbedBuilder();
+                eb.setColor(originalEmbed.getColor());
+                eb.setTitle(originalEmbed.getTitle());
+                eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
 
-        // Execute command
-        if (event.getMessage().getContentRaw().startsWith("execute")) {
-            GameManager game = findGameForUser(event.getAuthor());
-            if (game != null) {
-                useExecute(event.getMessage(), game);
-            } else {
-                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
-            }
-        }
+                StringBuilder sb = new StringBuilder();
+                for (GameRole role : game.playableRoles) {
+                    sb.append(String.format("> __%s__:\n> ```%s```\n", role.name, role.description));
+                }
+                eb.addField("Roles:", sb.toString(), true);
 
-        // Detective command
-        if (event.getMessage().getContentRaw().startsWith("detect")) {
-            GameManager game = findGameForUser(event.getAuthor());
-            if (game != null) {
-                useDetect(event.getMessage(), game);
-            } else {
-                sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
+                sb = new StringBuilder();
+                for (User user : game.getAllPlayers()) {
+                    sb.append(user.getAsMention());
+                    sb.append("\n");
+                }
+                eb.addField("Players", String.format(">>> %s", sb.toString()), true);
+
+                eb.addField("What Next?", "To add or remove players, use the ***padd*** or ***prem*** commands.\nTo add or remove roles, use the ***radd*** or ***rrem*** commands.\nTo start the game, click on the \u2705 emote.", false);
+
+                eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                game.displayMessge.editMessage(eb.build()).queue();
             }
         }
     }
@@ -552,22 +547,19 @@ public class GameListener extends ListenerAdapter {
         if (sourceMessage.getContentRaw().length() > (prefix + "create").length()) {
             String[] postCommandArgs = sourceMessage.getContentRaw().substring((prefix + "create").length() + 1).split(" ");
             for (String arg : postCommandArgs) {
-                if (arg.equals("auto")) {
-                    // Add all users from voice chat except for the author to the game
-                    VoiceChannel vc = sourceMessage.getMember().getVoiceState().getChannel();
-                    if (vc != null) {
-                        for (Member vcMember : vc.getMembers()) {
-                            if (!vcMember.getUser().equals(sourceMessage.getAuthor())) {
-                                gameMembers.add(vcMember.getUser());
-                            }
-                        }
-                    }
-                    continue;
-                }
-
                 GameRole role = findRoleFromString(arg);
                 if (role != null && !role.isDefault) {
                     rolesForThisGame.add(role);
+                }
+            }
+        }
+
+        // Add all users from voice chat except for the author to the game
+        VoiceChannel vc = sourceMessage.getMember().getVoiceState().getChannel();
+        if (vc != null) {
+            for (Member vcMember : vc.getMembers()) {
+                if (!vcMember.getUser().equals(sourceMessage.getAuthor())) {
+                    gameMembers.add(vcMember.getUser());
                 }
             }
         }
@@ -668,12 +660,19 @@ public class GameListener extends ListenerAdapter {
         }
     }
 
+    /**
+     * Assign a player the given chosen role and attempt to start the game.
+     *
+     * @param user
+     * @param chosenRole
+     * @param game
+     */
     private void readyUp(User user, GameRole chosenRole, GameManager game) {
         if (chosenRole != null) {
             try {
                 if (game.attemptGameStartWithRoleAssignment(user, chosenRole)) {
 
-                    Map<User, List<GameRole>> roleMap = game.giveOutNondefaultRoles();
+                    Map<User, List<GameRole>> roleMap = game.distributeNonDefaultRoles();
 
                     // Send role assignment message for non default roles and send everyone a game starting message
                     game.getAllPlayers().forEach(player -> {
@@ -756,7 +755,7 @@ public class GameListener extends ListenerAdapter {
                 }
             } catch (GeneralGameException ex) {
                 Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
-                if(game.displayMessge != null ){
+                if (game.displayMessge != null) {
                     game.displayMessge.getChannel().sendMessage(ex.getMessage()).queue();
                 }
                 this.tryDeleteUsersGame(user);
@@ -764,6 +763,52 @@ public class GameListener extends ListenerAdapter {
         }
     }
 
+    /**
+     * Attempts to delete a game for the given user.
+     *
+     * @param user
+     * @return
+     */
+    private boolean tryDeleteUsersGame(User user) {
+        GameManager game = gameDB.get(user);
+        if (game == null) {
+            return false;
+        }
+
+        // Update the display message if the game has it
+        if (game.displayMessge != null) {
+            game.displayMessge.clearReactions().queue((obj) -> {
+                List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
+                if (!gameMessageEmbeds.isEmpty()) {
+                    MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
+
+                    EmbedBuilder eb = new EmbedBuilder();
+                    eb.setColor(Color.RED);
+                    eb.setTitle(originalEmbed.getTitle());
+                    eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+
+                    eb.addField("Game has been stopped.", "Thanks for playing!", false);
+
+                    eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+
+                    game.displayMessge.editMessage(eb.build()).queue();
+                }
+            });
+        }
+
+        // Remove game from database
+        gameDB.remove(user);
+
+        return true;
+    }
+
+    /**
+     * Attempts to use a veto for the author of the given message in the given
+     * game
+     *
+     * @param sourceMessage
+     * @param game
+     */
     private void useVeto(Message sourceMessage, GameManager game) {
         game.getRolesForPlayer(sourceMessage.getAuthor()).stream().filter(role -> (role.id == 3)).forEachOrdered(_item -> {
             if (game.useVeto()) {
@@ -779,6 +824,13 @@ public class GameListener extends ListenerAdapter {
         });
     }
 
+    /**
+     * Attempts to use an execute for the author of the given message in the
+     * given game
+     *
+     * @param sourceMessage
+     * @param game
+     */
     private void useExecute(Message sourceMessage, GameManager game) {
         game.getRolesForPlayer(sourceMessage.getAuthor()).stream().filter(role -> (role.id == 4)).forEachOrdered(_item -> {
             if (game.useExecution()) {
@@ -794,6 +846,13 @@ public class GameListener extends ListenerAdapter {
         });
     }
 
+    /**
+     * Attempts to use a detect for the author of the given message in the given
+     * game
+     *
+     * @param sourceMessage
+     * @param game
+     */
     private void useDetect(Message sourceMessage, GameManager game) {
         String[] postCommandArgs = sourceMessage.getContentRaw().substring(("detect").length() + 1).split(" ");
 
@@ -831,6 +890,9 @@ public class GameListener extends ListenerAdapter {
         });
     }
 
+    /**
+     * Go through the database and remove any old games
+     */
     private void purgeDatabase() {
         Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "Started automatic gameDB purge");
 
@@ -854,6 +916,13 @@ public class GameListener extends ListenerAdapter {
         }
     }
 
+    /**
+     * Find a user in the given game whose name matches the given query
+     *
+     * @param query
+     * @param game
+     * @return
+     */
     private User findUserInGame(String query, GameManager game) {
         String playersName = query;
         int shortestDistance = Integer.MAX_VALUE;
@@ -870,15 +939,13 @@ public class GameListener extends ListenerAdapter {
         return mostLikelyUser;
     }
 
-    private GameManager findGameForUser(User user) {
-        for (GameManager game : gameDB.values()) {
-            if (game.getAllPlayers().contains(user)) {
-                return game;
-            }
-        }
-        return null;
-    }
-
+    /**
+     * Find a user in the given guild whose name matches the given query
+     *
+     * @param guild
+     * @param query
+     * @return
+     */
     private User findUserInGuild(Guild guild, String query) {
 
         List<Member> membersWithQueriedName = guild.getMembersByEffectiveName(query, true);
