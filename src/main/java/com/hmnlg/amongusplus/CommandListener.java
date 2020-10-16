@@ -50,7 +50,7 @@ import org.joda.time.Interval;
  *
  * @author maikotui
  */
-public class GameListener extends ListenerAdapter {
+public class CommandListener extends ListenerAdapter {
 
     /**
      * Prefix that must be used for commands to be recognized
@@ -76,7 +76,7 @@ public class GameListener extends ListenerAdapter {
      * The database of all created games. This will be purged periodically (see
      * purgeIntervalInMinutes)
      */
-    private final Map<User, GameManager> gameDB;
+    private final Map<User, GameData> gameDB;
 
     /**
      * The timer that will run the purge command
@@ -106,7 +106,7 @@ public class GameListener extends ListenerAdapter {
      * @param allRoles A list of all the roles this GameListener accepts
      * @param debug Whether to start the GameListener in debug mode or not
      */
-    public GameListener(List<GameRole> allRoles, boolean debug) {
+    public CommandListener(List<GameRole> allRoles, boolean debug) {
         super();
 
         // Assign from arguments
@@ -136,7 +136,7 @@ public class GameListener extends ListenerAdapter {
      *
      * @param gameListener The game listener to inherit values from
      */
-    public GameListener(GameListener gameListener) {
+    public CommandListener(CommandListener gameListener) {
         super();
 
         // Assign from arguments
@@ -199,7 +199,7 @@ public class GameListener extends ListenerAdapter {
                 message.addReaction("\u2705").queue();
                 sendResponse(message, "Pong :)");
                 if (debug) {
-                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Responded to ping from %s", message.getAuthor().getName()));
+                    Logger.getLogger(CommandListener.class.getName()).log(Level.INFO, String.format("Responded to ping from %s", message.getAuthor().getName()));
                 }
             }
 
@@ -214,7 +214,7 @@ public class GameListener extends ListenerAdapter {
                 helpText += prefix + "stop - If you are done playing among us, issue this command at any time to stop the current game.";
                 sendResponse(message, helpText);
                 if (debug) {
-                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Responded to help command from %s", message.getAuthor().getName()));
+                    Logger.getLogger(CommandListener.class.getName()).log(Level.INFO, String.format("Responded to help command from %s", message.getAuthor().getName()));
                 }
             }
 
@@ -225,7 +225,7 @@ public class GameListener extends ListenerAdapter {
                 message.addReaction("\u2705").queue();
                 sendResponse(message, roleInfo);
                 if (debug) {
-                    Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Responded to roles command from %s", message.getAuthor().getName()));
+                    Logger.getLogger(CommandListener.class.getName()).log(Level.INFO, String.format("Responded to roles command from %s", message.getAuthor().getName()));
                 }
             }
 
@@ -237,7 +237,7 @@ public class GameListener extends ListenerAdapter {
 
             // Info command
             if (content.equals(prefix + "info")) {
-                GameManager game = gameDB.get(event.getAuthor());
+                GameData game = gameDB.get(event.getAuthor());
                 if (game != null) {
                     // Get the embedded message 
                     List<MessageEmbed> embeds = game.displayMessge.getEmbeds();
@@ -283,7 +283,7 @@ public class GameListener extends ListenerAdapter {
                 }
 
                 // Get the game the author is the owner of
-                GameManager game = gameDB.get(event.getAuthor());
+                GameData game = gameDB.get(event.getAuthor());
                 if (game != null) {
                     // Parse the name provided
                     String nameToAdd = content.substring(prefix.length() + 5);
@@ -307,7 +307,7 @@ public class GameListener extends ListenerAdapter {
                 }
 
                 // Get the game the author is the owner of
-                GameManager game = gameDB.get(event.getAuthor());
+                GameData game = gameDB.get(event.getAuthor());
 
                 if (game != null) {
                     // Parse the name provided
@@ -337,7 +337,7 @@ public class GameListener extends ListenerAdapter {
                 }
 
                 // Get the game the author is the owner of
-                GameManager game = gameDB.get(event.getAuthor());
+                GameData game = gameDB.get(event.getAuthor());
                 if (game != null) {
                     // Parse the role provided
                     String roleToAdd = content.substring(prefix.length() + 5);
@@ -361,7 +361,7 @@ public class GameListener extends ListenerAdapter {
                 }
 
                 // Get the game the author is the owner of
-                GameManager game = gameDB.get(event.getAuthor());
+                GameData game = gameDB.get(event.getAuthor());
                 if (game != null) {
                     // Parse the role provided
                     String roleToRemove = content.substring(prefix.length() + 5);
@@ -397,7 +397,7 @@ public class GameListener extends ListenerAdapter {
                     event.getReaction().removeReaction(reactor).queue();
 
                     // Check if this message is a game display message
-                    for (GameManager game : gameDB.values()) {
+                    for (GameData game : gameDB.values()) {
                         if (game.displayMessge.getId().equals(message.getId())) { // Message is a game message
                             onDisplayMessageUpdate(reactor, reactionText, game);
                             return;
@@ -428,7 +428,7 @@ public class GameListener extends ListenerAdapter {
 
         // Veto command
         if (event.getMessage().getContentRaw().startsWith("veto")) {
-            GameManager game = gameDB.get(event.getAuthor());
+            GameData game = gameDB.get(event.getAuthor());
             if (game != null) {
                 useVeto(event.getMessage(), game);
             } else {
@@ -438,7 +438,7 @@ public class GameListener extends ListenerAdapter {
 
         // Execute command
         if (event.getMessage().getContentRaw().startsWith("execute")) {
-            GameManager game = gameDB.get(event.getAuthor());
+            GameData game = gameDB.get(event.getAuthor());
             if (game != null) {
                 useExecute(event.getMessage(), game);
             } else {
@@ -448,7 +448,7 @@ public class GameListener extends ListenerAdapter {
 
         // Detective command
         if (event.getMessage().getContentRaw().startsWith("detect")) {
-            GameManager game = gameDB.get(event.getAuthor());
+            GameData game = gameDB.get(event.getAuthor());
             if (game != null) {
                 useDetect(event.getMessage(), game);
             } else {
@@ -464,7 +464,7 @@ public class GameListener extends ListenerAdapter {
      * @param updateText
      * @param game
      */
-    private void onDisplayMessageUpdate(User updater, String updateText, GameManager game) {
+    private void onDisplayMessageUpdate(User updater, String updateText, GameData game) {
         switch (game.getState()) {
             case NEW -> {
                 if (updateText.contains("\u2705")) { // Checkmark
@@ -499,7 +499,7 @@ public class GameListener extends ListenerAdapter {
      *
      * @param game
      */
-    private void refreshNewGameMessage(GameManager game) {
+    private void refreshNewGameMessage(GameData game) {
         if (game.displayMessge != null) {
             List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
             if (!gameMessageEmbeds.isEmpty()) {
@@ -606,7 +606,7 @@ public class GameListener extends ListenerAdapter {
 
         sourceMessage.getChannel().sendMessage(eb.build()).queue(message -> {
             // Try to start game with given member list
-            GameManager game = new GameManager(gameMembers, new ArrayList<>(rolesForThisGame));
+            GameData game = new GameData(gameMembers, new ArrayList<>(rolesForThisGame));
             game.displayMessge = message;
 
             gameDB.put(sourceMessage.getAuthor(), game);
@@ -623,7 +623,7 @@ public class GameListener extends ListenerAdapter {
      *
      * @param event
      */
-    private void startGame(GameManager game) {
+    private void startGame(GameData game) {
         // Try to move to pregame.
         try {
             game.moveToPregame();
@@ -680,7 +680,7 @@ public class GameListener extends ListenerAdapter {
 
         } catch (GeneralGameException err) {
             // TODO: Do something if an error occurs
-            Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, err.getMessage(), err);
+            Logger.getLogger(CommandListener.class.getName()).log(Level.SEVERE, err.getMessage(), err);
         }
     }
 
@@ -691,7 +691,7 @@ public class GameListener extends ListenerAdapter {
      * @param chosenRole
      * @param game
      */
-    private void readyUp(User user, GameRole chosenRole, GameManager game) {
+    private void readyUp(User user, GameRole chosenRole, GameData game) {
         if (chosenRole != null) {
             try {
                 if (game.attemptGameStartWithRoleAssignment(user, chosenRole)) {
@@ -737,7 +737,7 @@ public class GameListener extends ListenerAdapter {
                     });
                     // Send a debug message
                     if (debug) {
-                        Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
+                        Logger.getLogger(CommandListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
                     }
                 } else {
                     List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
@@ -790,7 +790,7 @@ public class GameListener extends ListenerAdapter {
                     }
                 }
             } catch (GeneralGameException ex) {
-                Logger.getLogger(GameListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
+                Logger.getLogger(CommandListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
                 if (game.displayMessge != null) {
                     game.displayMessge.getChannel().sendMessage(ex.getMessage()).queue();
                 }
@@ -806,7 +806,7 @@ public class GameListener extends ListenerAdapter {
      * @return
      */
     private boolean tryDeleteUsersGame(User user) {
-        GameManager game = gameDB.get(user);
+        GameData game = gameDB.get(user);
         if (game == null) {
             return false;
         }
@@ -851,7 +851,7 @@ public class GameListener extends ListenerAdapter {
      * @param sourceMessage
      * @param game
      */
-    private void useVeto(Message sourceMessage, GameManager game) {
+    private void useVeto(Message sourceMessage, GameData game) {
         game.getRolesForPlayer(sourceMessage.getAuthor()).stream().filter(role -> (role.id == 3)).forEachOrdered(_item -> {
             if (game.useVeto()) {
                 game.getAllPlayers().forEach(player -> {
@@ -873,7 +873,7 @@ public class GameListener extends ListenerAdapter {
      * @param sourceMessage
      * @param game
      */
-    private void useExecute(Message sourceMessage, GameManager game) {
+    private void useExecute(Message sourceMessage, GameData game) {
         game.getRolesForPlayer(sourceMessage.getAuthor()).stream().filter(role -> (role.id == 4)).forEachOrdered(_item -> {
             if (game.useExecution()) {
                 game.getAllPlayers().forEach(player -> {
@@ -895,7 +895,7 @@ public class GameListener extends ListenerAdapter {
      * @param sourceMessage
      * @param game
      */
-    private void useDetect(Message sourceMessage, GameManager game) {
+    private void useDetect(Message sourceMessage, GameData game) {
         String[] postCommandArgs = sourceMessage.getContentRaw().substring(("detect").length() + 1).split(" ");
 
         // Incorrect arguments
@@ -936,15 +936,15 @@ public class GameListener extends ListenerAdapter {
      * Go through the database and remove any old games
      */
     private void purgeDatabase() {
-        Logger.getLogger(GameListener.class.getName()).log(Level.INFO, "Started automatic gameDB purge");
+        Logger.getLogger(CommandListener.class.getName()).log(Level.INFO, "Started automatic gameDB purge");
 
         if (debug) {
-            Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
+            Logger.getLogger(CommandListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - Previous gameDB: %s", gameDB.toString())));
         }
 
         List<User> gameOwners = new ArrayList<>(gameDB.keySet());
         gameOwners.forEach(gameOwner -> {
-            GameManager game = gameDB.get(gameOwner);
+            GameData game = gameDB.get(gameOwner);
             if (game.getState() != GameState.ACTIVE && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L) {
                 tryDeleteUsersGame(gameOwner);
                 gameOwner.openPrivateChannel().queue((channel) -> {
@@ -954,7 +954,7 @@ public class GameListener extends ListenerAdapter {
         });
 
         if (debug) {
-            Logger.getLogger(GameListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
+            Logger.getLogger(CommandListener.class.getName()).log(Level.INFO, String.format(String.format("DEBUG - New gameDB: %s", gameDB.toString())));
         }
     }
 
@@ -965,7 +965,7 @@ public class GameListener extends ListenerAdapter {
      * @param game
      * @return
      */
-    private User findUserInGame(String query, GameManager game) {
+    private User findUserInGame(String query, GameData game) {
         String playersName = query;
         int shortestDistance = Integer.MAX_VALUE;
         User mostLikelyUser = null;
@@ -1068,14 +1068,14 @@ public class GameListener extends ListenerAdapter {
         /**
          * Game Listener to purge
          */
-        private final GameListener gl;
+        private final CommandListener gl;
 
         /**
          * Stores the GameListener to use for purging when this command is ran.
          *
          * @param gameListener
          */
-        public PurgeTimerTask(GameListener gameListener) {
+        public PurgeTimerTask(CommandListener gameListener) {
             gl = gameListener;
         }
 

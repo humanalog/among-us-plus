@@ -29,9 +29,9 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter;
 public class AdminListener extends ListenerAdapter {
 
     private final JDA api;
-    private GameListener currentGameListener;
+    private CommandListener currentGameListener;
 
-    public AdminListener(JDA api, GameListener gameListener) {
+    public AdminListener(JDA api, CommandListener gameListener) {
         this.api = api;
         currentGameListener = gameListener;
     }
@@ -53,7 +53,7 @@ public class AdminListener extends ListenerAdapter {
 
             if (event.getMessage().getContentRaw().equalsIgnoreCase("au+restart")) {
                 api.removeEventListener(currentGameListener);
-                GameListener newGameListener = new GameListener(currentGameListener);
+                CommandListener newGameListener = new CommandListener(currentGameListener);
                 api.addEventListener(newGameListener);
                 currentGameListener = newGameListener;
                 event.getMessage().getChannel().sendMessage("restarted game").queue();

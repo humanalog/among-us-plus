@@ -33,7 +33,7 @@ import org.joda.time.Instant;
  *
  * @author maikotui
  */
-public class GameManager {
+public class GameData {
 
     /**
      * The message associated with this game that shows discord users a
@@ -73,7 +73,7 @@ public class GameManager {
      * @param usableNondefaultRoles All roles that can be assigned during this
      * game.
      */
-    public GameManager(List<User> players, List<GameRole> usableNondefaultRoles) {
+    public GameData(List<User> players, List<GameRole> usableNondefaultRoles) {
         // Instantiate all ArrayLists in map
         playerRoles = new HashMap<>();
         players.forEach(player -> {

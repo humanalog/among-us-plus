@@ -78,7 +78,7 @@ public class Main {
         builder.setMemberCachePolicy(MemberCachePolicy.ONLINE);
         builder.setChunkingFilter(ChunkingFilter.ALL);
         builder.enableCache(CacheFlag.VOICE_STATE);
-        GameListener gameListener = new GameListener(roles, false);
+        CommandListener gameListener = new CommandListener(roles, false);
         
         builder.addEventListeners(gameListener);
         
