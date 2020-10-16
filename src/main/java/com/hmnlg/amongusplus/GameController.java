@@ -11,14 +11,15 @@ import net.dv8tion.jda.api.entities.User;
 /**
  *
  * @author maikotui
+ * @param <T>
  */
-public class GameController {
+public class GameController<T extends GameDisplay> {
     
-    private final GameDisplay display;
+    private final T display;
     
     private final GameData data;
     
-    public GameController(GameDisplay d, List<User> players, List<GameRole> roles) {
+    public GameController(T d, List<User> players, List<GameRole> roles) {
         display = d;
         data = new GameData(players, roles);
     }
