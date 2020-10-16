@@ -23,9 +23,13 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.security.auth.login.LoginException;
-import net.dv8tion.jda.core.AccountType;
-import net.dv8tion.jda.core.JDA;
-import net.dv8tion.jda.core.JDABuilder;
+import net.dv8tion.jda.api.AccountType;
+import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.requests.GatewayIntent;
+import net.dv8tion.jda.api.utils.ChunkingFilter;
+import net.dv8tion.jda.api.utils.MemberCachePolicy;
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.yaml.snakeyaml.Yaml;
 
 /**
@@ -68,10 +72,15 @@ public class Main {
         }
 
         // Build the API
-        JDABuilder builder = new JDABuilder(AccountType.BOT);
-        builder.setToken(token);
+        JDABuilder builder = JDABuilder.createLight(token);
+        builder.enableIntents(GatewayIntent.GUILD_MEMBERS);
+        builder.disableIntents(GatewayIntent.GUILD_BANS, GatewayIntent.GUILD_EMOJIS, GatewayIntent.GUILD_INVITES);
+        builder.setMemberCachePolicy(MemberCachePolicy.ONLINE);
+        builder.setChunkingFilter(ChunkingFilter.ALL);
+        builder.enableCache(CacheFlag.VOICE_STATE);
         GameListener gameListener = new GameListener(roles, false);
-        builder.addEventListener(gameListener);
+        
+        builder.addEventListeners(gameListener);
         
         final JDA api;
         try {

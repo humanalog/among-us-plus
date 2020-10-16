@@ -27,17 +27,17 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import net.dv8tion.jda.core.EmbedBuilder;
-import net.dv8tion.jda.core.entities.Guild;
-import net.dv8tion.jda.core.entities.Member;
-import net.dv8tion.jda.core.entities.Message;
-import net.dv8tion.jda.core.entities.MessageEmbed;
-import net.dv8tion.jda.core.entities.User;
-import net.dv8tion.jda.core.entities.VoiceChannel;
-import net.dv8tion.jda.core.events.message.MessageReceivedEvent;
-import net.dv8tion.jda.core.events.message.priv.PrivateMessageReceivedEvent;
-import net.dv8tion.jda.core.events.message.react.MessageReactionAddEvent;
-import net.dv8tion.jda.core.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.entities.VoiceChannel;
+import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
+import net.dv8tion.jda.api.events.message.priv.PrivateMessageReceivedEvent;
+import net.dv8tion.jda.api.events.message.react.MessageReactionAddEvent;
+import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.apache.commons.text.similarity.LevenshteinDistance;
 import org.joda.time.Instant;
 import org.joda.time.Interval;
@@ -386,7 +386,8 @@ public class GameListener extends ListenerAdapter {
      */
     @Override
     public void onMessageReactionAdd(MessageReactionAddEvent event) {
-        event.getChannel().getMessageById(event.getMessageId()).queue(message -> {
+        
+        event.getChannel().retrieveMessageById(event.getMessageId()).queue(message -> {
             if (message.getAuthor().equals(event.getJDA().getSelfUser()) && !event.getUser().equals(event.getJDA().getSelfUser())) { // If message is from this bot and a user other than this bot reacted to a message
                 User reactor = event.getUser();
                 String reactionText = event.getReactionEmote().getName();

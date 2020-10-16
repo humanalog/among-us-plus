@@ -16,9 +16,9 @@
  */
 package com.hmnlg.amongusplus;
 
-import net.dv8tion.jda.core.JDA;
-import net.dv8tion.jda.core.events.message.priv.PrivateMessageReceivedEvent;
-import net.dv8tion.jda.core.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.events.message.priv.PrivateMessageReceivedEvent;
+import net.dv8tion.jda.api.hooks.ListenerAdapter;
 
 /**
  * A ListenerAdapter for the JDA Bot that will listen for admin commands from my
