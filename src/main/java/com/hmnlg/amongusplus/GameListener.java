@@ -29,9 +29,12 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.GuildVoiceState;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.entities.MessageEmbed.AuthorInfo;
+import net.dv8tion.jda.api.entities.MessageEmbed.Footer;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.VoiceChannel;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -386,21 +389,22 @@ public class GameListener extends ListenerAdapter {
      */
     @Override
     public void onMessageReactionAdd(MessageReactionAddEvent event) {
-        
-        event.getChannel().retrieveMessageById(event.getMessageId()).queue(message -> {
-            if (message.getAuthor().equals(event.getJDA().getSelfUser()) && !event.getUser().equals(event.getJDA().getSelfUser())) { // If message is from this bot and a user other than this bot reacted to a message
-                User reactor = event.getUser();
-                String reactionText = event.getReactionEmote().getName();
-                event.getReaction().removeReaction(event.getUser()).queue();
+        event.retrieveMessage().queue(message -> {
+            event.retrieveMember().queue((member) -> {
+                User reactor = member.getUser();
+                if (message.getAuthor().equals(event.getJDA().getSelfUser()) && !reactor.equals(event.getJDA().getSelfUser())) { // If message is from this bot and a user other than this bot reacted to a message
+                    String reactionText = event.getReactionEmote().getName();
+                    event.getReaction().removeReaction(reactor).queue();
 
-                // Check if this message is a game display message
-                for (GameManager game : gameDB.values()) {
-                    if (game.displayMessge.getId() == null ? message.getId() == null : game.displayMessge.getId().equals(message.getId())) { // Message is a game message
-                        onDisplayMessageUpdate(reactor, reactionText, game);
-                        return;
+                    // Check if this message is a game display message
+                    for (GameManager game : gameDB.values()) {
+                        if (game.displayMessge.getId().equals(message.getId())) { // Message is a game message
+                            onDisplayMessageUpdate(reactor, reactionText, game);
+                            return;
+                        }
                     }
                 }
-            }
+            });
         });
     }
 
@@ -504,7 +508,10 @@ public class GameListener extends ListenerAdapter {
                 EmbedBuilder eb = new EmbedBuilder();
                 eb.setColor(originalEmbed.getColor());
                 eb.setTitle(originalEmbed.getTitle());
-                eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+                AuthorInfo authorInfo = originalEmbed.getAuthor();
+                if (authorInfo != null) {
+                    eb.setAuthor(authorInfo.getName(), authorInfo.getUrl(), authorInfo.getIconUrl());
+                }
 
                 StringBuilder sb = new StringBuilder();
                 for (GameRole role : game.playableRoles) {
@@ -521,7 +528,10 @@ public class GameListener extends ListenerAdapter {
 
                 eb.addField("What Next?", "To add or remove players, use the ***padd*** or ***prem*** commands.\nTo add or remove roles, use the ***radd*** or ***rrem*** commands.\nTo start the game, click on the \u2705 emote.", false);
 
-                eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+                Footer originalFooter = originalEmbed.getFooter();
+                if (originalFooter != null) {
+                    eb.setFooter(originalFooter.getText(), originalFooter.getIconUrl());
+                }
 
                 game.displayMessge.editMessage(eb.build()).queue();
             }
@@ -557,11 +567,17 @@ public class GameListener extends ListenerAdapter {
         }
 
         // Add all users from voice chat except for the author to the game
-        VoiceChannel vc = sourceMessage.getMember().getVoiceState().getChannel();
-        if (vc != null) {
-            for (Member vcMember : vc.getMembers()) {
-                if (!vcMember.getUser().equals(sourceMessage.getAuthor())) {
-                    gameMembers.add(vcMember.getUser());
+        Member authorAsMember = sourceMessage.getMember();
+        if (authorAsMember != null) {
+            GuildVoiceState vs = authorAsMember.getVoiceState();
+            if (vs != null && vs.inVoiceChannel() && vs.getChannel() != null) {
+                VoiceChannel vc = vs.getChannel();
+                if (vc != null) {
+                    for (Member vcMember : vc.getMembers()) {
+                        if (!vcMember.getUser().equals(sourceMessage.getAuthor())) {
+                            gameMembers.add(vcMember.getUser());
+                        }
+                    }
                 }
             }
         }
@@ -619,7 +635,10 @@ public class GameListener extends ListenerAdapter {
                 EmbedBuilder eb = new EmbedBuilder();
                 eb.setColor(Color.green);
                 eb.setTitle(originalEmbed.getTitle());
-                eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+                AuthorInfo authorInfo = originalEmbed.getAuthor();
+                if (authorInfo != null) {
+                    eb.setAuthor(authorInfo.getName(), authorInfo.getUrl(), authorInfo.getIconUrl());
+                }
 
                 // Print not ready users
                 List<User> usersNotReady = game.getPlayersWithoutRoles();
@@ -648,7 +667,10 @@ public class GameListener extends ListenerAdapter {
 
                 eb.addField("Choose Your Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
 
-                eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+                Footer originalFooter = originalEmbed.getFooter();
+                if (originalFooter != null) {
+                    eb.setFooter(originalFooter.getText(), originalFooter.getIconUrl());
+                }
 
                 game.displayMessge.editMessage(eb.build()).queue((message) -> {
                     message.addReaction("\uD83C\uDDE8").queue(); // C
@@ -693,13 +715,19 @@ public class GameListener extends ListenerAdapter {
                             EmbedBuilder eb = new EmbedBuilder();
                             eb.setColor(Color.green);
                             eb.setTitle(originalEmbed.getTitle());
-                            eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+                            AuthorInfo authorInfo = originalEmbed.getAuthor();
+                            if (authorInfo != null) {
+                                eb.setAuthor(authorInfo.getName(), authorInfo.getUrl(), authorInfo.getIconUrl());
+                            }
 
                             eb.addField(originalEmbed.getFields().get(0));
                             eb.addField(originalEmbed.getFields().get(1));
                             eb.addField("What's Next?", "Choose \uD83D\uDD04 to restart the game.\nChoose \uD83D\uDED1 to stop the game.", false);
 
-                            eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+                            Footer originalFooter = originalEmbed.getFooter();
+                        if (originalFooter != null) {
+                            eb.setFooter(originalFooter.getText(), originalFooter.getIconUrl());
+                        }
 
                             game.displayMessge.editMessage(eb.build()).queue((message) -> {
                                 message.addReaction("\uD83D\uDD04").queue(); // Redo
@@ -718,7 +746,10 @@ public class GameListener extends ListenerAdapter {
                         EmbedBuilder eb = new EmbedBuilder();
                         eb.setColor(Color.green);
                         eb.setTitle(originalEmbed.getTitle());
-                        eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+                        AuthorInfo authorInfo = originalEmbed.getAuthor();
+                        if (authorInfo != null) {
+                            eb.setAuthor(authorInfo.getName(), authorInfo.getUrl(), authorInfo.getIconUrl());
+                        }
 
                         // Print not ready users
                         List<User> usersNotReady = game.getPlayersWithoutRoles();
@@ -747,7 +778,10 @@ public class GameListener extends ListenerAdapter {
 
                         eb.addField("Choose Your Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
 
-                        eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+                        Footer originalFooter = originalEmbed.getFooter();
+                        if (originalFooter != null) {
+                            eb.setFooter(originalFooter.getText(), originalFooter.getIconUrl());
+                        }
 
                         game.displayMessge.editMessage(eb.build()).queue((message) -> {
                             message.addReaction("\uD83C\uDDE8").queue(); // C
@@ -787,11 +821,17 @@ public class GameListener extends ListenerAdapter {
                     EmbedBuilder eb = new EmbedBuilder();
                     eb.setColor(Color.RED);
                     eb.setTitle(originalEmbed.getTitle());
-                    eb.setAuthor(originalEmbed.getAuthor().getName(), originalEmbed.getAuthor().getUrl(), originalEmbed.getAuthor().getIconUrl());
+                    AuthorInfo authorInfo = originalEmbed.getAuthor();
+                        if (authorInfo != null) {
+                            eb.setAuthor(authorInfo.getName(), authorInfo.getUrl(), authorInfo.getIconUrl());
+                        }
 
                     eb.addField("Game has been stopped.", "Thanks for playing!", false);
 
-                    eb.setFooter(originalEmbed.getFooter().getText(), originalEmbed.getFooter().getIconUrl());
+                    Footer originalFooter = originalEmbed.getFooter();
+                        if (originalFooter != null) {
+                            eb.setFooter(originalFooter.getText(), originalFooter.getIconUrl());
+                        }
 
                     game.displayMessge.editMessage(eb.build()).queue();
                 }
