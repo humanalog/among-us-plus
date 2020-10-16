@@ -13,14 +13,16 @@ import java.util.List;
  */
 public interface GameDisplay {
     
-    public void showStart(String playerList, String[] roleNames, String[] roleDescriptions);
+    public void showStart(List<Long> playerIDs, String[] roleNames, String[] roleDescriptions);
 
-    public void showReadyUp(List<String> readyPlayers, List<String> notReadyPlayers);
+    public void showReadyUp(List<Long> readyPlayers, List<Long> notReadyPlayers);
     
-    public void showActiveGame();
+    public void showActiveGame(List<Long> playerIDs, String[] roleNames, String[] roleDescriptions);
     
     public void showGameEnded();
     
     public void showErrorMessage(String errorMessage);
+    
+    public void reshowDisplay(GameState state);
     
 }

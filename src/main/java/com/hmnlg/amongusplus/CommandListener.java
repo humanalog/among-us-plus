@@ -76,7 +76,7 @@ public class CommandListener extends ListenerAdapter {
      * The database of all created games. This will be purged periodically (see
      * purgeIntervalInMinutes)
      */
-    private final Map<User, GameData> gameDB;
+    private final Map<User, GameController> gameDB;
 
     /**
      * The timer that will run the purge command
@@ -237,7 +237,7 @@ public class CommandListener extends ListenerAdapter {
 
             // Info command
             if (content.equals(prefix + "info")) {
-                GameData game = gameDB.get(event.getAuthor());
+                GameController game = gameDB.get(event.getAuthor());
                 if (game != null) {
                     // Get the embedded message 
                     List<MessageEmbed> embeds = game.displayMessge.getEmbeds();

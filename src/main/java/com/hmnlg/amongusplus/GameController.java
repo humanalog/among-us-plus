@@ -6,7 +6,6 @@
 package com.hmnlg.amongusplus;
 
 import java.util.List;
-import net.dv8tion.jda.api.entities.User;
 
 /**
  *
@@ -19,12 +18,19 @@ public class GameController<T extends GameDisplay> {
     
     private final GameData data;
     
-    public GameController(T d, List<User> players, List<GameRole> roles) {
+    public GameController(T d, List<Long> playerIDs, List<GameRole> roles) {
+        String[] roleNames = new String[roles.size()]; 
+        String[] roleDescriptions = new String[roles.size()];
+        d.showStart(playerIDs ,roleNames, roleDescriptions);
         display = d;
-        data = new GameData(players, roles);
+        
+        data = new GameData(playerIDs, roles);
     }
     
     public void startGame() {
-        
+        List<Long> playersNotReady = data.getPlayersWithoutRoles();
+        List<Long> allPlayers = data.getAllPlayers();
+        allPlayers.removeAll(playersNotReady);
+        display.showReadyUp(allPlayers, playersNotReady);
     }
 }

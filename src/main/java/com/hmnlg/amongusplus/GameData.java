@@ -44,7 +44,7 @@ public class GameData {
     /**
      * The main list of players and the roles that each player holds
      */
-    private final Map<User, List<GameRole>> playerRoles;
+    private final Map<Long, List<GameRole>> playerRoles;
 
     /**
      * A list of all roles that are usable for this game
@@ -73,7 +73,7 @@ public class GameData {
      * @param usableNondefaultRoles All roles that can be assigned during this
      * game.
      */
-    public GameData(List<User> players, List<GameRole> usableNondefaultRoles) {
+    public GameData(List<Long> players, List<GameRole> usableNondefaultRoles) {
         // Instantiate all ArrayLists in map
         playerRoles = new HashMap<>();
         players.forEach(player -> {
@@ -129,7 +129,7 @@ public class GameData {
      * @return
      * @throws GeneralGameException
      */
-    public boolean attemptGameStartWithRoleAssignment(User user, GameRole roleToAssign) throws GeneralGameException {
+    public boolean attemptGameStartWithRoleAssignment(Long user, GameRole roleToAssign) throws GeneralGameException {
         // This can only be done in pregame
         if (state == GameState.PREGAME) {
             // Catch bad role assignment
@@ -161,9 +161,9 @@ public class GameData {
      *
      * @return
      */
-    public List<User> getPlayersWithoutRoles() {
-        List<User> list = new ArrayList<>();
-        for (Entry<User, List<GameRole>> entry : playerRoles.entrySet()) {
+    public List<Long> getPlayersWithoutRoles() {
+        List<Long> list = new ArrayList<>();
+        for (Entry<Long, List<GameRole>> entry : playerRoles.entrySet()) {
             if (entry.getValue().isEmpty()) {
                 list.add(entry.getKey());
             }
@@ -177,11 +177,11 @@ public class GameData {
      * @return
      * @throws GeneralGameException
      */
-    public Map<User, List<GameRole>> distributeNonDefaultRoles() throws GeneralGameException {
-        List<User> playersWithAssignableRoles = getAllPlayers();
+    public Map<Long, List<GameRole>> distributeNonDefaultRoles() throws GeneralGameException {
+        List<Long> playersWithAssignableRoles = getAllPlayers();
         for (GameRole assignableRole : playableRoles) {
             if (!playersWithAssignableRoles.isEmpty()) {
-                User assignableUser = getUserWhoCanAcceptRole(playersWithAssignableRoles, assignableRole);
+                Long assignableUser = getUserWhoCanAcceptRole(playersWithAssignableRoles, assignableRole);
                 if (assignableUser != null) {
                     playersWithAssignableRoles.remove(assignableUser);
                     playerRoles.get(assignableUser).add(assignableRole);
@@ -204,12 +204,12 @@ public class GameData {
      * @param targetRole
      * @return
      */
-    private User getUserWhoCanAcceptRole(List<User> playerList, GameRole targetRole) {
+    private Long getUserWhoCanAcceptRole(List<Long> playerList, GameRole targetRole) {
         // For generating a random value to pick a random player
         Random rand = new Random();
 
         // The user that can accept the targetRole
-        User userToGiveRole = null;
+        Long userToGiveRole = null;
 
         // If an acceptable player has been found
         boolean foundAcceptablePlayer;
@@ -241,7 +241,7 @@ public class GameData {
      */
     public void resetGame() {
         // Clear roles
-        Set<User> userSet = new HashSet<>(playerRoles.keySet());
+        Set<Long> userSet = new HashSet<>(playerRoles.keySet());
         playerRoles.clear();
         userSet.forEach(player -> {
             playerRoles.put(player, new ArrayList<>());
@@ -301,7 +301,7 @@ public class GameData {
      *
      * @return
      */
-    public List<User> getAllPlayers() {
+    public List<Long> getAllPlayers() {
         return new ArrayList<>(playerRoles.keySet());
     }
 
@@ -310,7 +310,7 @@ public class GameData {
      *
      * @param player
      */
-    public void addPlayer(User player) {
+    public void addPlayer(Long player) {
         if (state == GameState.NEW && !playerRoles.containsKey(player)) {
             playerRoles.put(player, new ArrayList<>());
         }
@@ -355,7 +355,7 @@ public class GameData {
      * @param player
      * @return
      */
-    public List<GameRole> getRolesForPlayer(User player) {
+    public List<GameRole> getRolesForPlayer(Long player) {
         return playerRoles.get(player);
     }
 
