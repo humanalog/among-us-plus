@@ -76,7 +76,7 @@ public class CommandListener extends ListenerAdapter {
      * The database of all created games. This will be purged periodically (see
      * purgeIntervalInMinutes)
      */
-    private final Map<User, GameController> gameDB;
+    private final Map<User, GameController<EmbedMessageDisplay>> gameDB;
 
     /**
      * The timer that will run the purge command
@@ -232,7 +232,8 @@ public class CommandListener extends ListenerAdapter {
             // ----- GAME COMMANDS ----
             // Create command
             if (content.startsWith(prefix + "create")) {
-                createGame(event.getMessage());
+                
+                createGameFromMessage(event.getMessage());
             }
 
             // Info command
@@ -544,15 +545,15 @@ public class CommandListener extends ListenerAdapter {
      *
      * @param event Message received event that issued the command
      */
-    private void createGame(Message sourceMessage) {
+    private void createGameFromMessage(Message sourceMessage) {
         if (gameDB.containsKey(sourceMessage.getAuthor())) {
             sendErrorResponse(sourceMessage, "You are already the creator of another game.");
             return;
         }
 
         // Create the list of game members and add the author of the message as a member
-        ArrayList<User> gameMembers = new ArrayList<>();
-        gameMembers.add(sourceMessage.getAuthor());
+        ArrayList<Long> gameMembers = new ArrayList<>();
+        gameMembers.add(sourceMessage.getAuthor().getIdLong());
 
         // Parse out the arguments given
         HashSet<GameRole> rolesForThisGame = new HashSet<>();
@@ -575,47 +576,15 @@ public class CommandListener extends ListenerAdapter {
                 if (vc != null) {
                     for (Member vcMember : vc.getMembers()) {
                         if (!vcMember.getUser().equals(sourceMessage.getAuthor())) {
-                            gameMembers.add(vcMember.getUser());
+                            gameMembers.add(vcMember.getIdLong());
                         }
                     }
                 }
             }
         }
 
-        EmbedBuilder eb = new EmbedBuilder();
-        eb.setColor(Color.green);
-        eb.setTitle(String.format("Among Us+ Game", sourceMessage.getAuthor().getName()));
-        eb.setAuthor("Among Us+ Bot", "https://github.com/humanalog/among-us-plus/", sourceMessage.getJDA().getSelfUser().getAvatarUrl());
-
-        StringBuilder sb = new StringBuilder();
-        for (GameRole role : rolesForThisGame) {
-            sb.append(String.format("> __%s__:\n> ```%s```\n", role.name, role.description));
-        }
-        eb.addField("Roles:", sb.toString(), true);
-
-        sb = new StringBuilder();
-        for (User user : gameMembers) {
-            sb.append(user.getAsMention());
-            sb.append("\n");
-        }
-        eb.addField("Players", String.format(">>> %s", sb.toString()), true);
-
-        eb.addField("What Next?", "To add or remove players, use the ***padd*** or ***prem*** commands.\nTo add or remove roles, use the ***radd*** or ***rrem*** commands.\nTo start the game, click on the \u2705 emote.", false);
-
-        eb.setFooter(String.format("Game created by %s", sourceMessage.getAuthor().getAsTag()), sourceMessage.getAuthor().getAvatarUrl());
-
-        sourceMessage.getChannel().sendMessage(eb.build()).queue(message -> {
-            // Try to start game with given member list
-            GameData game = new GameData(gameMembers, new ArrayList<>(rolesForThisGame));
-            game.displayMessge = message;
-
-            gameDB.put(sourceMessage.getAuthor(), game);
-
-            message.addReaction("\u2705").queue(); //Checkmark
-        });
-
-        // Send a message to let the user know the game was created
-        sourceMessage.addReaction("\u2705").queue();
+        GameController<EmbedMessageDisplay> controller = new GameController<>(new EmbedMessageDisplay(sourceMessage), gameMembers, new ArrayList<>(rolesForThisGame));
+        gameDB.put(sourceMessage.getAuthor(), controller);
     }
 
     /**
