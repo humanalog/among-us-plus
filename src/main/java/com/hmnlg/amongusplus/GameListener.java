@@ -83,13 +83,13 @@ public class GameListener extends ListenerAdapter {
     /**
      * The amount of time in minutes between each purge of the database
      */
-    private final int purgeIntervalInMinutes = 20;
+    private final int purgeIntervalInMinutes = 15;
 
     /**
      * The amount of time in minutes since a state change for a game to be
      * purged from the database
      */
-    private final int maximumInactiveTimeInMinutes = 20;
+    private final int maximumInactiveTimeInMinutes = 30;
 
     /**
      * Toggle for debug mode
@@ -479,6 +479,7 @@ public class GameListener extends ListenerAdapter {
             case ACTIVE -> {
                 if (updateText.contains("\uD83D\uDD04")) { // Restart command
                     game.resetGame();
+                    this.refreshNewGameMessage(game);
                 } else if (updateText.contains("\uD83D\uDED1")) { // Stop command
                     tryDeleteUsersGame(updater);
                 }
