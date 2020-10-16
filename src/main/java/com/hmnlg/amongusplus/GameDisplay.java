@@ -21,6 +21,8 @@ public interface GameDisplay {
     
     public void showGameEnded();
     
+    public void showPlayerMessage(Long playerID, String message);
+    
     public void showErrorMessage(String errorMessage);
     
     public void reshowDisplay(GameState state);

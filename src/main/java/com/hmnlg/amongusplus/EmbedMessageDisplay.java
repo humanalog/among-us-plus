@@ -165,6 +165,11 @@ public class EmbedMessageDisplay implements GameDisplay {
     }
 
     @Override
+    public void showPlayerMessage(Long playerID, String message) {
+        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
+    
+    @Override
     public void reshowDisplay(GameState state) {
         message.getChannel().sendMessage("").queue((newMessage) -> {
             if (message.getEmbeds().size() > 0) {
@@ -190,5 +195,4 @@ public class EmbedMessageDisplay implements GameDisplay {
             message = newMessage;
         });
     }
-
 }

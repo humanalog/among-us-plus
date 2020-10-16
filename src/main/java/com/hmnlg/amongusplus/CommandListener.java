@@ -232,7 +232,7 @@ public class CommandListener extends ListenerAdapter {
             // ----- GAME COMMANDS ----
             // Create command
             if (content.startsWith(prefix + "create")) {
-                
+
                 createGameFromMessage(event.getMessage());
             }
 
@@ -240,33 +240,7 @@ public class CommandListener extends ListenerAdapter {
             if (content.equals(prefix + "info")) {
                 GameController game = gameDB.get(event.getAuthor());
                 if (game != null) {
-                    // Get the embedded message 
-                    List<MessageEmbed> embeds = game.displayMessge.getEmbeds();
-                    if (embeds.size() > 0) {
-                        // Clone the embedded message
-                        MessageEmbed embed = embeds.get(0);
-                        game.displayMessge.getChannel().sendMessage(embed).queue((newMessage) -> { // Send the message and then add the appropriate reactions
-                            switch (game.getState()) { // Add reactions based on the gamestate
-                                case NEW -> {
-                                    newMessage.addReaction("\u2705").queue(); // Checkmark
-                                }
-                                case PREGAME -> {
-                                    newMessage.addReaction("\uD83C\uDDE8").queue(); // C
-                                    newMessage.addReaction("\uD83C\uDDEE").queue(); // I
-                                }
-                                case ACTIVE -> {
-                                    newMessage.addReaction("\uD83D\uDD04").queue(); // Restart
-                                    newMessage.addReaction("\uD83D\uDED1").queue(); // Stop
-                                }
-                                default -> {
-                                }
-                            }
-
-                            // Delete old message and replace with new message
-                            game.displayMessge.delete().queue();
-                            game.displayMessge = newMessage;
-                        });
-                    }
+                    game.redisplayGame();
                 }
             }
 
@@ -465,29 +439,30 @@ public class CommandListener extends ListenerAdapter {
      * @param updateText
      * @param game
      */
-    private void onDisplayMessageUpdate(User updater, String updateText, GameData game) {
+    private void onDisplayMessageUpdate(User updater, String updateText, GameController game) {
         switch (game.getState()) {
             case NEW -> {
                 if (updateText.contains("\u2705")) { // Checkmark
-                    game.displayMessge.clearReactions().queue((obj) -> startGame(game));
+                    game.startGame();
                 }
             }
             case PREGAME -> {
                 GameRole chosenRole = null;
                 if (updateText.contains("\uD83C\uDDE8")) { // C
-                    chosenRole = this.crewRole;
+                    game.readyUp(updater.getIdLong(), crewRole);
                 } else if (updateText.contains("\uD83C\uDDEE")) { // I
-                    chosenRole = this.imposterRole;
+                    game.readyUp(updater.getIdLong(), imposterRole);
                 }
 
-                readyUp(updater, chosenRole, game);
             }
             case ACTIVE -> {
                 if (updateText.contains("\uD83D\uDD04")) { // Restart command
-                    game.resetGame();
-                    this.refreshNewGameMessage(game);
+                    game.restartGame();
                 } else if (updateText.contains("\uD83D\uDED1")) { // Stop command
-                    tryDeleteUsersGame(updater);
+                    GameController removedGame = gameDB.remove(updater);
+                    if (removedGame != null) {
+                        game.stopGame();
+                    }
                 }
             }
             default -> {
@@ -588,229 +563,13 @@ public class CommandListener extends ListenerAdapter {
     }
 
     /**
-     * Attempts to move the game to pregame.
-     *
-     * @param event
-     */
-    private void startGame(GameData game) {
-        // Try to move to pregame.
-        try {
-            game.moveToPregame();
-
-            // Update the game message
-            List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
-            if (!gameMessageEmbeds.isEmpty()) {
-                MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
-                EmbedBuilder eb = new EmbedBuilder();
-                eb.setColor(Color.green);
-                eb.setTitle(originalEmbed.getTitle());
-                AuthorInfo authorInfo = originalEmbed.getAuthor();
-                if (authorInfo != null) {
-                    eb.setAuthor(authorInfo.getName(), authorInfo.getUrl(), authorInfo.getIconUrl());
-                }
-
-                // Print not ready users
-                List<User> usersNotReady = game.getPlayersWithoutRoles();
-                StringBuilder sb = new StringBuilder();
-                if (!usersNotReady.isEmpty()) {
-                    sb.append(">>> ");
-                }
-                for (User user : usersNotReady) {
-                    sb.append(user.getAsMention()).append("\n");
-                }
-                eb.addField("Not Ready", sb.toString(), true);
-
-                // Get ready users
-                List<User> readyUsers = game.getAllPlayers();
-                readyUsers.removeAll(usersNotReady);
-
-                // Print out ready
-                sb = new StringBuilder();
-                if (!readyUsers.isEmpty()) {
-                    sb.append(">>> ");
-                }
-                for (User user : readyUsers) {
-                    sb.append(user.getAsMention()).append("\n");
-                }
-                eb.addField("Ready", sb.toString(), true);
-
-                eb.addField("Choose Your Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
-
-                Footer originalFooter = originalEmbed.getFooter();
-                if (originalFooter != null) {
-                    eb.setFooter(originalFooter.getText(), originalFooter.getIconUrl());
-                }
-
-                game.displayMessge.editMessage(eb.build()).queue((message) -> {
-                    message.addReaction("\uD83C\uDDE8").queue(); // C
-                    message.addReaction("\uD83C\uDDEE").queue(); // I
-                });
-            }
-
-        } catch (GeneralGameException err) {
-            // TODO: Do something if an error occurs
-            Logger.getLogger(CommandListener.class.getName()).log(Level.SEVERE, err.getMessage(), err);
-        }
-    }
-
-    /**
-     * Assign a player the given chosen role and attempt to start the game.
-     *
-     * @param user
-     * @param chosenRole
-     * @param game
-     */
-    private void readyUp(User user, GameRole chosenRole, GameData game) {
-        if (chosenRole != null) {
-            try {
-                if (game.attemptGameStartWithRoleAssignment(user, chosenRole)) {
-
-                    Map<User, List<GameRole>> roleMap = game.distributeNonDefaultRoles();
-
-                    // Send role assignment message for non default roles and send everyone a game starting message
-                    game.getAllPlayers().forEach(player -> {
-                        player.openPrivateChannel().queue((channel) -> {
-                            game.getRolesForPlayer(player).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
-                                channel.sendMessage(role.assignmentMessage).queue(); // TODO: Move to embed instead of messaging
-                            });
-                        });
-                    });
-
-                    // Update the game message
-                    game.displayMessge.clearReactions().queue((obj) -> {
-                        List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
-                        if (!gameMessageEmbeds.isEmpty()) {
-                            MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
-                            EmbedBuilder eb = new EmbedBuilder();
-                            eb.setColor(Color.green);
-                            eb.setTitle(originalEmbed.getTitle());
-                            AuthorInfo authorInfo = originalEmbed.getAuthor();
-                            if (authorInfo != null) {
-                                eb.setAuthor(authorInfo.getName(), authorInfo.getUrl(), authorInfo.getIconUrl());
-                            }
-
-                            eb.addField(originalEmbed.getFields().get(0));
-                            eb.addField(originalEmbed.getFields().get(1));
-                            eb.addField("What's Next?", "Choose \uD83D\uDD04 to restart the game.\nChoose \uD83D\uDED1 to stop the game.", false);
-
-                            Footer originalFooter = originalEmbed.getFooter();
-                        if (originalFooter != null) {
-                            eb.setFooter(originalFooter.getText(), originalFooter.getIconUrl());
-                        }
-
-                            game.displayMessge.editMessage(eb.build()).queue((message) -> {
-                                message.addReaction("\uD83D\uDD04").queue(); // Redo
-                                message.addReaction("\uD83D\uDED1").queue(); // Stop
-                            });
-                        }
-                    });
-                    // Send a debug message
-                    if (debug) {
-                        Logger.getLogger(CommandListener.class.getName()).log(Level.INFO, String.format("Game is starting. Rolemap: %s", roleMap));
-                    }
-                } else {
-                    List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
-                    if (!gameMessageEmbeds.isEmpty()) {
-                        MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
-                        EmbedBuilder eb = new EmbedBuilder();
-                        eb.setColor(Color.green);
-                        eb.setTitle(originalEmbed.getTitle());
-                        AuthorInfo authorInfo = originalEmbed.getAuthor();
-                        if (authorInfo != null) {
-                            eb.setAuthor(authorInfo.getName(), authorInfo.getUrl(), authorInfo.getIconUrl());
-                        }
-
-                        // Print not ready users
-                        List<User> usersNotReady = game.getPlayersWithoutRoles();
-                        StringBuilder sb = new StringBuilder();
-                        if (!usersNotReady.isEmpty()) {
-                            sb.append(">>> ");
-                        }
-                        for (User notReadyUser : usersNotReady) {
-                            sb.append(notReadyUser.getAsMention()).append("\n");
-                        }
-                        eb.addField("Not Ready", sb.toString(), true);
-
-                        // Get ready users
-                        List<User> readyUsers = game.getAllPlayers();
-                        readyUsers.removeAll(usersNotReady);
-
-                        // Print out ready
-                        sb = new StringBuilder();
-                        if (!readyUsers.isEmpty()) {
-                            sb.append(">>> ");
-                        }
-                        for (User readyUser : readyUsers) {
-                            sb.append(readyUser.getAsMention()).append("\n");
-                        }
-                        eb.addField("Ready", sb.toString(), true);
-
-                        eb.addField("Choose Your Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
-
-                        Footer originalFooter = originalEmbed.getFooter();
-                        if (originalFooter != null) {
-                            eb.setFooter(originalFooter.getText(), originalFooter.getIconUrl());
-                        }
-
-                        game.displayMessge.editMessage(eb.build()).queue((message) -> {
-                            message.addReaction("\uD83C\uDDE8").queue(); // C
-                            message.addReaction("\uD83C\uDDEE").queue(); // I
-                        });
-                    }
-                }
-            } catch (GeneralGameException ex) {
-                Logger.getLogger(CommandListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
-                if (game.displayMessge != null) {
-                    game.displayMessge.getChannel().sendMessage(ex.getMessage()).queue();
-                }
-                this.tryDeleteUsersGame(user);
-            }
-        }
-    }
-
-    /**
      * Attempts to delete a game for the given user.
      *
      * @param user
      * @return
      */
     private boolean tryDeleteUsersGame(User user) {
-        GameData game = gameDB.get(user);
-        if (game == null) {
-            return false;
-        }
 
-        // Update the display message if the game has it
-        if (game.displayMessge != null) {
-            game.displayMessge.clearReactions().queue((obj) -> {
-                List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
-                if (!gameMessageEmbeds.isEmpty()) {
-                    MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
-
-                    EmbedBuilder eb = new EmbedBuilder();
-                    eb.setColor(Color.RED);
-                    eb.setTitle(originalEmbed.getTitle());
-                    AuthorInfo authorInfo = originalEmbed.getAuthor();
-                        if (authorInfo != null) {
-                            eb.setAuthor(authorInfo.getName(), authorInfo.getUrl(), authorInfo.getIconUrl());
-                        }
-
-                    eb.addField("Game has been stopped.", "Thanks for playing!", false);
-
-                    Footer originalFooter = originalEmbed.getFooter();
-                        if (originalFooter != null) {
-                            eb.setFooter(originalFooter.getText(), originalFooter.getIconUrl());
-                        }
-
-                    game.displayMessge.editMessage(eb.build()).queue();
-                }
-            });
-        }
-
-        // Remove game from database
-        gameDB.remove(user);
-
-        return true;
     }
 
     /**
