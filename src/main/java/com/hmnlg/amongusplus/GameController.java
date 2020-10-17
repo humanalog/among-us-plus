@@ -8,6 +8,7 @@ package com.hmnlg.amongusplus;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.joda.time.Instant;
 
 /**
  *
@@ -21,6 +22,8 @@ public class GameController<T extends GameDisplay> {
     private final GameData data;
 
     public GameState state;
+
+    private Instant lastGameStateChange;
 
     private boolean vetoUsed;
     private boolean executeUsed;
@@ -39,6 +42,14 @@ public class GameController<T extends GameDisplay> {
 
         d.showStart(playerIDs, roleNames, roleDescriptions);
         display = d;
+    }
+    
+    public Instant getLastGameStateChangeTime() {
+        return lastGameStateChange;
+    }
+
+    public List<Long> getAllPlayers() {
+        return data.getAllPlayers();
     }
 
     public boolean hasPlayer(Long userID) {
@@ -63,6 +74,10 @@ public class GameController<T extends GameDisplay> {
 
     public void redisplayGame() {
         display.reshowDisplay(GameState.ACTIVE);
+    }
+    
+    public void endGame() {
+        display.showGameEnded();
     }
 
     public void startGame() {
@@ -138,11 +153,11 @@ public class GameController<T extends GameDisplay> {
                 }
             }
         }
-        
+
         return false;
     }
-    
-    public boolean useExecute(Long userID) {
+
+    public boolean useExecute(Long userID, String nameToExecute) {
         if (!executeUsed) {
             for (GameRole role : data.getRolesForPlayer(userID)) {
                 if (role.id == 4) {
@@ -151,10 +166,10 @@ public class GameController<T extends GameDisplay> {
                 }
             }
         }
-        
+
         return false;
     }
-    
+
     public boolean useDetect(Long userID, Long userToDetect, GameRole roleToDetect) {
         if (!detectUsed) {
             for (GameRole role : data.getRolesForPlayer(userID)) {
@@ -164,7 +179,7 @@ public class GameController<T extends GameDisplay> {
                 }
             }
         }
-        
+
         return false;
     }
 

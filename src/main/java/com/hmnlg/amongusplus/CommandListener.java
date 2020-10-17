@@ -16,7 +16,6 @@
  */
 package com.hmnlg.amongusplus;
 
-import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -27,14 +26,10 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.GuildVoiceState;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
-import net.dv8tion.jda.api.entities.MessageEmbed;
-import net.dv8tion.jda.api.entities.MessageEmbed.AuthorInfo;
-import net.dv8tion.jda.api.entities.MessageEmbed.Footer;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.VoiceChannel;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
@@ -246,7 +241,7 @@ public class CommandListener extends ListenerAdapter {
 
             // Stop command
             if (content.equals(prefix + "stop")) {
-                tryDeleteUsersGame(event.getAuthor());
+                // TODO: implement
             }
 
             // Add player command
@@ -366,10 +361,52 @@ public class CommandListener extends ListenerAdapter {
                     String reactionText = event.getReactionEmote().getName();
                     event.getReaction().removeReaction(reactor).queue();
 
+                    boolean reactorIsGameOwner = gameDB.containsKey(reactor);
+
+                    GameController reactorsGame = null;
+                    if (reactorIsGameOwner) {
+                        reactorsGame = gameDB.get(reactor);
+                    } else {
+                        for (GameController game : gameDB.values()) {
+                            if (game.hasPlayer(reactor.getIdLong())) {
+                                reactorsGame = game;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (reactorsGame != null) {
+                        switch (reactorsGame.getState()) {
+                            case NEW -> {
+                                if (reactionText.contains("\u2705") && reactorIsGameOwner) { // Checkmark
+                                    reactorsGame.startGame();
+                                }
+                            }
+                            case PREGAME -> {
+                                if (reactionText.contains("\uD83C\uDDE8")) { // C
+                                    reactorsGame.readyUp(reactor.getIdLong(), crewRole);
+                                } else if (reactionText.contains("\uD83C\uDDEE")) { // I
+                                    reactorsGame.readyUp(reactor.getIdLong(), imposterRole);
+                                }
+
+                            }
+                            case ACTIVE -> {
+                                if (reactionText.contains("\uD83D\uDD04") && reactorIsGameOwner) { // Restart command
+                                    reactorsGame.restartGame();
+                                } else if (reactionText.contains("\uD83D\uDED1") && reactorIsGameOwner) { // Stop command
+                                    GameController removedGame = gameDB.remove(reactor);
+                                    if (removedGame != null) {
+                                        reactorsGame.endGame();
+                                    }
+                                }
+
+                            }
+                        }
+                    }
                     // Check if this message is a game display message
                     for (GameController game : gameDB.values()) {
-                        if(game.hasPlayer(reactor.getIdLong())) {
-                            onDisplayMessageUpdate(reactor, reactionText, game);
+                        if (game.hasPlayer(reactor.getIdLong())) {
+
                             return;
                         }
                     }
@@ -409,8 +446,8 @@ public class CommandListener extends ListenerAdapter {
         // Execute command
         if (event.getMessage().getContentRaw().startsWith("execute")) {
             GameController game = gameDB.get(event.getAuthor());
-            if (game != null) {
-                game.useExecute(event.getAuthor().getIdLong());
+            if (game != null && event.getMessage().getContentRaw().length() > 8) {
+                game.useExecute(event.getAuthor().getIdLong(), event.getMessage().getContentRaw().substring(8));
             } else {
                 sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
             }
@@ -420,91 +457,27 @@ public class CommandListener extends ListenerAdapter {
         if (event.getMessage().getContentRaw().startsWith("detect")) {
             GameController game = gameDB.get(event.getAuthor());
             if (game != null) {
-                game.useDetect(event.getAuthor().getIdLong(), Long.MIN_VALUE, new GameRole()); // TODO: CHANGE
+                String[] postCommandArgs = event.getMessage().getContentRaw().substring(("detect").length() + 1).split(" ");
+
+                // Incorrect arguments
+                if (postCommandArgs.length < 2) {
+                    event.getChannel().sendMessage("Invalid format. Command should be 'detect [discord user name] [suspected role]'.").queue();
+                    return;
+                }
+
+                // Parse given role
+                GameRole givenRole = findRoleFromString(postCommandArgs[1]);
+                if (givenRole == null) {
+                    event.getChannel().sendMessage("Invalid role. Check role list.").queue();
+                    return;
+                }
+
+                // Get the user
+                User mostLikelyUser = findUserInGame(event.getMessage().getGuild(), postCommandArgs[0], game);
+
+                game.useDetect(event.getAuthor().getIdLong(), mostLikelyUser.getIdLong(), givenRole); // TODO: CHANGE
             } else {
                 sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
-            }
-        }
-    }
-
-    /**
-     * Triggered when a display message is updated with a reaction.
-     *
-     * @param updater
-     * @param updateText
-     * @param game
-     */
-    private void onDisplayMessageUpdate(User updater, String updateText, GameController game) {
-        switch (game.getState()) {
-            case NEW -> {
-                if (updateText.contains("\u2705")) { // Checkmark
-                    game.startGame();
-                }
-            }
-            case PREGAME -> {
-                GameRole chosenRole = null;
-                if (updateText.contains("\uD83C\uDDE8")) { // C
-                    game.readyUp(updater.getIdLong(), crewRole);
-                } else if (updateText.contains("\uD83C\uDDEE")) { // I
-                    game.readyUp(updater.getIdLong(), imposterRole);
-                }
-
-            }
-            case ACTIVE -> {
-                if (updateText.contains("\uD83D\uDD04")) { // Restart command
-                    game.restartGame();
-                } else if (updateText.contains("\uD83D\uDED1")) { // Stop command
-                    GameController removedGame = gameDB.remove(updater);
-                    if (removedGame != null) {
-                        game.stopGame();
-                    }
-                }
-            }
-            default -> {
-            }
-        }
-    }
-
-    /**
-     * Refreshes the game message (only works for games with "New" state).
-     *
-     * @param game
-     */
-    private void refreshNewGameMessage(GameData game) {
-        if (game.displayMessge != null) {
-            List<MessageEmbed> gameMessageEmbeds = game.displayMessge.getEmbeds();
-            if (!gameMessageEmbeds.isEmpty()) {
-                MessageEmbed originalEmbed = gameMessageEmbeds.get(0);
-
-                EmbedBuilder eb = new EmbedBuilder();
-                eb.setColor(originalEmbed.getColor());
-                eb.setTitle(originalEmbed.getTitle());
-                AuthorInfo authorInfo = originalEmbed.getAuthor();
-                if (authorInfo != null) {
-                    eb.setAuthor(authorInfo.getName(), authorInfo.getUrl(), authorInfo.getIconUrl());
-                }
-
-                StringBuilder sb = new StringBuilder();
-                for (GameRole role : game.playableRoles) {
-                    sb.append(String.format("> __%s__:\n> ```%s```\n", role.name, role.description));
-                }
-                eb.addField("Roles:", sb.toString(), true);
-
-                sb = new StringBuilder();
-                for (User user : game.getAllPlayers()) {
-                    sb.append(user.getAsMention());
-                    sb.append("\n");
-                }
-                eb.addField("Players", String.format(">>> %s", sb.toString()), true);
-
-                eb.addField("What Next?", "To add or remove players, use the ***padd*** or ***prem*** commands.\nTo add or remove roles, use the ***radd*** or ***rrem*** commands.\nTo start the game, click on the \u2705 emote.", false);
-
-                Footer originalFooter = originalEmbed.getFooter();
-                if (originalFooter != null) {
-                    eb.setFooter(originalFooter.getText(), originalFooter.getIconUrl());
-                }
-
-                game.displayMessge.editMessage(eb.build()).queue();
             }
         }
     }
@@ -558,104 +531,6 @@ public class CommandListener extends ListenerAdapter {
     }
 
     /**
-     * Attempts to delete a game for the given user.
-     *
-     * @param user
-     * @return
-     */
-    private boolean tryDeleteUsersGame(User user) {
-
-    }
-
-    /**
-     * Attempts to use a veto for the author of the given message in the given
-     * game
-     *
-     * @param sourceMessage
-     * @param game
-     */
-    private void useVeto(Message sourceMessage, GameData game) {
-        game.getRolesForPlayer(sourceMessage.getAuthor()).stream().filter(role -> (role.id == 3)).forEachOrdered(_item -> {
-            if (game.useVeto()) {
-                game.getAllPlayers().forEach(player -> {
-                    player.openPrivateChannel().queue((channel)
-                            -> {
-                        channel.sendMessage("VETO USED! SKIP VOTE IMMEDIATELY.").queue();
-                    });
-                });
-            } else {
-                sourceMessage.getChannel().sendMessage("You've already used a veto.").queue();
-            }
-        });
-    }
-
-    /**
-     * Attempts to use an execute for the author of the given message in the
-     * given game
-     *
-     * @param sourceMessage
-     * @param game
-     */
-    private void useExecute(Message sourceMessage, GameData game) {
-        game.getRolesForPlayer(sourceMessage.getAuthor()).stream().filter(role -> (role.id == 4)).forEachOrdered(_item -> {
-            if (game.useExecution()) {
-                game.getAllPlayers().forEach(player -> {
-                    player.openPrivateChannel().queue((channel)
-                            -> {
-                        channel.sendMessage("EXECUTE USED! Vote for " + sourceMessage.getContentRaw().substring(8)).queue();
-                    });
-                });
-            } else {
-                sourceMessage.getChannel().sendMessage("You've already used your execution.").queue();
-            }
-        });
-    }
-
-    /**
-     * Attempts to use a detect for the author of the given message in the given
-     * game
-     *
-     * @param sourceMessage
-     * @param game
-     */
-    private void useDetect(Message sourceMessage, GameData game) {
-        String[] postCommandArgs = sourceMessage.getContentRaw().substring(("detect").length() + 1).split(" ");
-
-        // Incorrect arguments
-        if (postCommandArgs.length < 2) {
-            sourceMessage.getChannel().sendMessage("Invalid format. Command should be 'detect [discord user name] [suspected role]'.").queue();
-            return;
-        }
-
-        // Parse given role
-        GameRole givenRole = findRoleFromString(postCommandArgs[1]);
-        if (givenRole == null) {
-            sourceMessage.getChannel().sendMessage("Invalid role. Check role list.").queue();
-            return;
-        }
-
-        // Get the user
-        User mostLikelyUser = findUserInGame(postCommandArgs[0], game);
-
-        // Ensure sender has detective role then run detective search
-        game.getRolesForPlayer(sourceMessage.getAuthor()).forEach(role -> {
-            if (role.id == 7) {
-                if (game.useDetect()) {
-                    if (game.getRolesForPlayer(mostLikelyUser).contains(role)) {
-                        sourceMessage.getChannel().sendMessage(mostLikelyUser.getName() + " IS a(n) " + role.name).queue();
-                    } else {
-                        sourceMessage.getChannel().sendMessage(mostLikelyUser.getName() + " IS NOT a(n) " + role.name).queue();
-                    }
-                } else {
-                    sourceMessage.getChannel().sendMessage("You've already used your detect.").queue();
-                }
-            } else {
-                sourceMessage.getChannel().sendMessage("You are not able to detect this game.").queue();
-            }
-        });
-    }
-
-    /**
      * Go through the database and remove any old games
      */
     private void purgeDatabase() {
@@ -667,9 +542,9 @@ public class CommandListener extends ListenerAdapter {
 
         List<User> gameOwners = new ArrayList<>(gameDB.keySet());
         gameOwners.forEach(gameOwner -> {
-            GameData game = gameDB.get(gameOwner);
+            GameController game = gameDB.get(gameOwner);
             if (game.getState() != GameState.ACTIVE && new Interval(game.getLastGameStateChangeTime(), new Instant()).toDurationMillis() > maximumInactiveTimeInMinutes * 60000L) {
-                tryDeleteUsersGame(gameOwner);
+                game.endGame();
                 gameOwner.openPrivateChannel().queue((channel) -> {
                     channel.sendMessage("Your Among Us+ game has been inactive for longer than 20 minutes. It has been automatically stopped.").queue();
                 });
@@ -688,15 +563,17 @@ public class CommandListener extends ListenerAdapter {
      * @param game
      * @return
      */
-    private User findUserInGame(String query, GameData game) {
+    private User findUserInGame(Guild guild, String query, GameController game) {
         String playersName = query;
         int shortestDistance = Integer.MAX_VALUE;
         User mostLikelyUser = null;
         LevenshteinDistance ld = new LevenshteinDistance();
-        for (User user : game.getAllPlayers()) {
-            int newDistance = ld.apply(playersName, user.getName());
+        List<Long> userIDs = game.getAllPlayers();
+        for (Long userID : userIDs) {
+            Member member = guild.retrieveMemberById(userID).complete();
+            int newDistance = ld.apply(playersName, member.getEffectiveName());
             if (shortestDistance > newDistance) {
-                mostLikelyUser = user;
+                mostLikelyUser = member.getUser();
                 shortestDistance = newDistance;
             }
         }
