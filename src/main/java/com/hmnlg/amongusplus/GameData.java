@@ -323,7 +323,7 @@ public class GameData {
      * @param player
      * @return
      */
-    public boolean removePlayer(User player) {
+    public boolean removePlayer(Long player) {
         return state == GameState.NEW && playerRoles.remove(player) != null;
     }
 

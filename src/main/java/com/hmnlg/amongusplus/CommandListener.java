@@ -258,7 +258,7 @@ public class CommandListener extends ListenerAdapter {
                 }
 
                 // Get the game the author is the owner of
-                GameData game = gameDB.get(event.getAuthor());
+                GameController game = gameDB.get(event.getAuthor());
                 if (game != null) {
                     // Parse the name provided
                     String nameToAdd = content.substring(prefix.length() + 5);
@@ -266,8 +266,7 @@ public class CommandListener extends ListenerAdapter {
 
                     // Add the player
                     if (user != null) {
-                        game.addPlayer(user);
-                        refreshNewGameMessage(game);
+                        game.addPlayer(user.getIdLong());
                     }
                 } else {
                     sendErrorResponse(event.getMessage(), "You are not the owner of any active games.");
@@ -282,7 +281,7 @@ public class CommandListener extends ListenerAdapter {
                 }
 
                 // Get the game the author is the owner of
-                GameData game = gameDB.get(event.getAuthor());
+                GameController game = gameDB.get(event.getAuthor());
 
                 if (game != null) {
                     // Parse the name provided
@@ -296,9 +295,7 @@ public class CommandListener extends ListenerAdapter {
                             return;
                         }
 
-                        if (game.removePlayer(user)) {
-                            refreshNewGameMessage(game);
-                        }
+                        game.removePlayer(user.getIdLong());
                     }
                 } else {
                     sendErrorResponse(event.getMessage(), "You are not the owner of any active games.");
@@ -312,7 +309,7 @@ public class CommandListener extends ListenerAdapter {
                 }
 
                 // Get the game the author is the owner of
-                GameData game = gameDB.get(event.getAuthor());
+                GameController game = gameDB.get(event.getAuthor());
                 if (game != null) {
                     // Parse the role provided
                     String roleToAdd = content.substring(prefix.length() + 5);
@@ -321,7 +318,6 @@ public class CommandListener extends ListenerAdapter {
                     // Add the role
                     if (role != null) {
                         game.addRole(role);
-                        refreshNewGameMessage(game);
                     }
 
                 } else {
@@ -336,7 +332,7 @@ public class CommandListener extends ListenerAdapter {
                 }
 
                 // Get the game the author is the owner of
-                GameData game = gameDB.get(event.getAuthor());
+                GameController game = gameDB.get(event.getAuthor());
                 if (game != null) {
                     // Parse the role provided
                     String roleToRemove = content.substring(prefix.length() + 5);
@@ -344,9 +340,7 @@ public class CommandListener extends ListenerAdapter {
 
                     // Add the role
                     if (role != null) {
-                        if (game.removeRole(role)) {
-                            refreshNewGameMessage(game);
-                        }
+                        game.removeRole(role);
                     }
 
                 } else {
@@ -364,6 +358,7 @@ public class CommandListener extends ListenerAdapter {
      */
     @Override
     public void onMessageReactionAdd(MessageReactionAddEvent event) {
+        // TODO: Maybe ensure reaction is an emote that we look for
         event.retrieveMessage().queue(message -> {
             event.retrieveMember().queue((member) -> {
                 User reactor = member.getUser();
@@ -372,8 +367,8 @@ public class CommandListener extends ListenerAdapter {
                     event.getReaction().removeReaction(reactor).queue();
 
                     // Check if this message is a game display message
-                    for (GameData game : gameDB.values()) {
-                        if (game.displayMessge.getId().equals(message.getId())) { // Message is a game message
+                    for (GameController game : gameDB.values()) {
+                        if(game.hasPlayer(reactor.getIdLong())) {
                             onDisplayMessageUpdate(reactor, reactionText, game);
                             return;
                         }
@@ -403,9 +398,9 @@ public class CommandListener extends ListenerAdapter {
 
         // Veto command
         if (event.getMessage().getContentRaw().startsWith("veto")) {
-            GameData game = gameDB.get(event.getAuthor());
+            GameController game = gameDB.get(event.getAuthor());
             if (game != null) {
-                useVeto(event.getMessage(), game);
+                game.useVeto(event.getAuthor().getIdLong());
             } else {
                 sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
             }
@@ -413,9 +408,9 @@ public class CommandListener extends ListenerAdapter {
 
         // Execute command
         if (event.getMessage().getContentRaw().startsWith("execute")) {
-            GameData game = gameDB.get(event.getAuthor());
+            GameController game = gameDB.get(event.getAuthor());
             if (game != null) {
-                useExecute(event.getMessage(), game);
+                game.useExecute(event.getAuthor().getIdLong());
             } else {
                 sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
             }
@@ -423,9 +418,9 @@ public class CommandListener extends ListenerAdapter {
 
         // Detective command
         if (event.getMessage().getContentRaw().startsWith("detect")) {
-            GameData game = gameDB.get(event.getAuthor());
+            GameController game = gameDB.get(event.getAuthor());
             if (game != null) {
-                useDetect(event.getMessage(), game);
+                game.useDetect(event.getAuthor().getIdLong(), Long.MIN_VALUE, new GameRole()); // TODO: CHANGE
             } else {
                 sendErrorResponse(event.getMessage(), "Could not find a game you are a member of.");
             }

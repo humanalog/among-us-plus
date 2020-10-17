@@ -15,13 +15,17 @@ import java.util.logging.Logger;
  * @param <T>
  */
 public class GameController<T extends GameDisplay> {
-    
+
     private final T display;
 
     private final GameData data;
 
     public GameState state;
-    
+
+    private boolean vetoUsed;
+    private boolean executeUsed;
+    private boolean detectUsed;
+
     public GameController(T d, List<Long> playerIDs, List<GameRole> roles) {
         data = new GameData(playerIDs, roles);
 
@@ -35,6 +39,26 @@ public class GameController<T extends GameDisplay> {
 
         d.showStart(playerIDs, roleNames, roleDescriptions);
         display = d;
+    }
+
+    public boolean hasPlayer(Long userID) {
+        return data.getAllPlayers().contains(userID);
+    }
+
+    public void addPlayer(Long userID) {
+        data.addPlayer(userID);
+    }
+
+    public boolean removePlayer(Long userID) {
+        return data.removePlayer(userID);
+    }
+
+    public void addRole(GameRole role) {
+        data.addRole(role);
+    }
+
+    public void removeRole(GameRole role) {
+        data.removeRole(role);
     }
 
     public void redisplayGame() {
@@ -53,17 +77,17 @@ public class GameController<T extends GameDisplay> {
             Logger.getLogger(GameController.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
-    
+
     public void restartGame() {
         data.resetGame();
-        
+
         String[] roleNames = new String[data.playableRoles.size()];
-                    String[] roleDescriptions = new String[data.playableRoles.size()];
-                    for (int i = 0; i < data.playableRoles.size(); i++) {
-                        GameRole role = data.playableRoles.get(i);
-                        roleNames[i] = role.name;
-                        roleDescriptions[i] = role.description;
-                    }
+        String[] roleDescriptions = new String[data.playableRoles.size()];
+        for (int i = 0; i < data.playableRoles.size(); i++) {
+            GameRole role = data.playableRoles.get(i);
+            roleNames[i] = role.name;
+            roleDescriptions[i] = role.description;
+        }
 
         display.showStart(data.getAllPlayers(), roleNames, roleDescriptions);
     }
@@ -105,10 +129,49 @@ public class GameController<T extends GameDisplay> {
         }
     }
 
+    public boolean useVeto(Long userID) {
+        if (!vetoUsed) {
+            for (GameRole role : data.getRolesForPlayer(userID)) {
+                if (role.id == 3) {
+                    vetoUsed = true;
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    public boolean useExecute(Long userID) {
+        if (!executeUsed) {
+            for (GameRole role : data.getRolesForPlayer(userID)) {
+                if (role.id == 4) {
+                    executeUsed = true;
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    public boolean useDetect(Long userID, Long userToDetect, GameRole roleToDetect) {
+        if (!detectUsed) {
+            for (GameRole role : data.getRolesForPlayer(userID)) {
+                if (role.id == 7) {
+                    detectUsed = true;
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+
     public void stopGame() {
         display.showGameEnded();
     }
-    
+
     public GameState getState() {
         return data.getState();
     }
