@@ -28,7 +28,10 @@ public class EmbedMessageDisplay implements GameDisplay {
     public EmbedMessageDisplay(Message receivedCreateMessage) {
         creator = receivedCreateMessage.getAuthor();
         bot = receivedCreateMessage.getJDA().getSelfUser();
-        message = receivedCreateMessage.getChannel().sendMessage("").complete();
+
+        EmbedBuilder eb = new EmbedBuilder();
+        eb.addField("*Building game...*", "", false);
+        message = receivedCreateMessage.getChannel().sendMessage(eb.build()).complete();
     }
 
     @Override
@@ -63,8 +66,6 @@ public class EmbedMessageDisplay implements GameDisplay {
 
     @Override
     public void showReadyUp(List<Long> readyPlayers, List<Long> notReadyPlayers) {
-        message.clearReactions().queue();
-
         EmbedBuilder eb = createDefaultEmbedBuilder();
 
         StringBuilder sb = new StringBuilder();
@@ -90,15 +91,16 @@ public class EmbedMessageDisplay implements GameDisplay {
         eb.addField("Choose Your Role", "Choose \uD83C\uDDE8 for crewmate and \uD83C\uDDEE for imposter.", false);
 
         message.editMessage(eb.build()).queue((newMessage) -> {
-            newMessage.addReaction("\uD83C\uDDE8").queue(); // C
-            newMessage.addReaction("\uD83C\uDDEE").queue(); // I
+            if (newMessage.getReactions().size() < 2) {
+                message.clearReactions().queue();
+                newMessage.addReaction("\uD83C\uDDE8").queue(); // C
+                newMessage.addReaction("\uD83C\uDDEE").queue(); // I
+            }
         });
     }
 
     @Override
     public void showActiveGame(List<Long> playerIDs, String[] roleNames, String[] roleDescriptions) {
-        message.clearReactions().queue();
-
         EmbedBuilder eb = createDefaultEmbedBuilder();
 
         StringBuilder sb = new StringBuilder();
@@ -123,9 +125,13 @@ public class EmbedMessageDisplay implements GameDisplay {
         eb.addField("What's Next?", "Choose \uD83D\uDD04 to restart the game.\nChoose \uD83D\uDED1 to stop the game.", false);
 
         message.editMessage(eb.build()).queue((newMessage) -> {
-            newMessage.addReaction("\uD83D\uDD04").queue(); // Redo
-            newMessage.addReaction("\uD83D\uDED1").queue(); // Stop
-        }); // Checkmark
+            if (newMessage.getReactions().size() < 2) {
+                newMessage.clearReactions().queue();
+                newMessage.addReaction("\uD83D\uDD04").queue(); // Redo
+                newMessage.addReaction("\uD83D\uDED1").queue(); // Stop
+            }
+
+        });
     }
 
     @Override
@@ -159,7 +165,7 @@ public class EmbedMessageDisplay implements GameDisplay {
 
         eb.setAuthor("Among Us+ Bot", "https://github.com/humanalog/among-us-plus/", bot.getAvatarUrl());
 
-        eb.setFooter(String.format("Game created by %s", creator.getName()), creator.getName());
+        eb.setFooter(String.format("Game created by %s", creator.getName()), creator.getAvatarUrl());
 
         return eb;
     }
@@ -168,10 +174,12 @@ public class EmbedMessageDisplay implements GameDisplay {
     public void showPlayerMessage(Long playerID, String message) {
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
-    
+
     @Override
     public void reshowDisplay(GameState state) {
-        message.getChannel().sendMessage("").queue((newMessage) -> {
+        EmbedBuilder eb = new EmbedBuilder();
+        eb.addField("*Building game...*", "", false);
+        message.getChannel().sendMessage(eb.build()).queue((newMessage) -> {
             if (message.getEmbeds().size() > 0) {
                 MessageEmbed embed = message.getEmbeds().get(0);
                 newMessage.editMessage(embed).queue();
