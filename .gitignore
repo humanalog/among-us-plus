@@ -3,3 +3,6 @@ nb-configuration.xml
 nbactions.xml
 /bin/
 /target/
+.classpath
+.project
+.settings/

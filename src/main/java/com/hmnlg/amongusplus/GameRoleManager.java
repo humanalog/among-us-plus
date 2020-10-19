@@ -164,9 +164,13 @@ public class GameRoleManager {
      *
      * @param player
      */
-    public void addPlayer(Long player) {
+    public boolean addPlayer(Long player) {
         if (!playerRoles.containsKey(player)) {
             playerRoles.put(player, new ArrayList<>());
+            return true;
+        }
+        else {
+        	return false;
         }
     }
 
@@ -186,9 +190,13 @@ public class GameRoleManager {
      *
      * @param role
      */
-    public void addRole(GameRole role) {
+    public boolean addRole(GameRole role) {
         if (!playableRoles.contains(role) && !role.isDefault) {
             playableRoles.add(role);
+            return true;
+        }
+        else {
+        	return false;
         }
     }
 
