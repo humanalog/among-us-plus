@@ -378,11 +378,15 @@ public class CommandListener extends ListenerAdapter {
                     if (reactorsGame != null) {
                         switch (reactorsGame.getState()) {
                             case NEW -> {
-                                if (reactionText.contains("\u2705") && reactorIsGameOwner) { // Checkmark
-                                    reactorsGame.startGame();
+                                if (reactionText.contains("\u2705") && reactorIsGameOwner) { try {
+                                    // Checkmark
+                                    reactorsGame.moveToReadyUp();
+                                    } catch (GeneralGameException ex) {
+                                        Logger.getLogger(CommandListener.class.getName()).log(Level.SEVERE, null, ex);
+                                    }
                                 }
                             }
-                            case PREGAME -> {
+                            case READYUP -> {
                                 if (reactionText.contains("\uD83C\uDDE8")) { // C
                                     reactorsGame.readyUp(reactor.getIdLong(), crewRole);
                                 } else if (reactionText.contains("\uD83C\uDDEE")) { // I

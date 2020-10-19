@@ -188,7 +188,7 @@ public class EmbedMessageDisplay implements GameDisplay {
                 case NEW -> {
                     newMessage.addReaction("\u2705").queue(); // Checkmark
                 }
-                case PREGAME -> {
+                case READYUP -> {
                     newMessage.addReaction("\uD83C\uDDE8").queue(); // C
                     newMessage.addReaction("\uD83C\uDDEE").queue(); // I
                 }

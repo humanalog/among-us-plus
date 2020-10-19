@@ -19,9 +19,9 @@ public class GameController<T extends GameDisplay> {
 
     private final T display;
 
-    private final GameData data;
+    private final GameRoleManager roleManager;
 
-    public GameState state;
+    private GameState state;
 
     private Instant lastGameStateChange;
 
@@ -30,7 +30,7 @@ public class GameController<T extends GameDisplay> {
     private boolean detectUsed;
 
     public GameController(T d, List<Long> playerIDs, List<GameRole> roles) {
-        data = new GameData(playerIDs, roles);
+        roleManager = new GameRoleManager(playerIDs, roles);
 
         String[] roleNames = new String[roles.size()];
         String[] roleDescriptions = new String[roles.size()];
@@ -44,109 +44,124 @@ public class GameController<T extends GameDisplay> {
         display = d;
     }
     
-    public Instant getLastGameStateChangeTime() {
-        return lastGameStateChange;
+    public void restartGame() {
+        roleManager.resetRoles();
+
+        vetoUsed = false;
+        executeUsed = false;
+        detectUsed = false;
+        state = GameState.NEW;
+        lastGameStateChange = new Instant();
+
+        String[] roleNames = new String[roleManager.playableRoles.size()];
+        String[] roleDescriptions = new String[roleManager.playableRoles.size()];
+        for (int i = 0; i < roleManager.playableRoles.size(); i++) {
+            GameRole role = roleManager.playableRoles.get(i);
+            roleNames[i] = role.name;
+            roleDescriptions[i] = role.description;
+        }
+
+        display.showStart(roleManager.getAllPlayers(), roleNames, roleDescriptions);
     }
 
-    public List<Long> getAllPlayers() {
-        return data.getAllPlayers();
+    public void moveToReadyUp() throws GeneralGameException {
+        if (state == GameState.READYUP || state == GameState.ACTIVE) {
+            throw new GeneralGameException("Among Us+ game is " + state.toString().toLowerCase() + ". Please run stop command first.");
+        }
+
+        state = GameState.READYUP;
+        lastGameStateChange = new Instant();
+
+        List<Long> playersNotReady = roleManager.getPlayersWithoutRoles();
+        List<Long> allPlayers = roleManager.getAllPlayers();
+        allPlayers.removeAll(playersNotReady);
+        display.showReadyUp(allPlayers, playersNotReady);
     }
 
-    public boolean hasPlayer(Long userID) {
-        return data.getAllPlayers().contains(userID);
-    }
+    
 
-    public void addPlayer(Long userID) {
-        data.addPlayer(userID);
-    }
+    public void readyUp(Long user, GameRole chosenRole) {
+        if (chosenRole != null) {
+            if (roleManager.tryAssignRole(user, chosenRole)) {
+                if (roleManager.allPlayersAreReady()) {
 
-    public boolean removePlayer(Long userID) {
-        return data.removePlayer(userID);
-    }
+                    try {
+                        // Game has started, distribute non default roles
+                        roleManager.distributeNonDefaultRoles();
+                    } catch (GeneralGameException ex) {
+                        Logger.getLogger(GameController.class.getName()).log(Level.SEVERE, null, ex);
+                        return;
+                    }
 
-    public void addRole(GameRole role) {
-        data.addRole(role);
-    }
+                    // Send role assignment message for non default roles and send everyone a game starting message
+                    roleManager.getAllPlayers().forEach(playerID -> {
+                        roleManager.getRolesForPlayer(playerID).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
+                            display.showPlayerMessage(playerID, role.assignmentMessage);
+                        });
+                    });
 
-    public void removeRole(GameRole role) {
-        data.removeRole(role);
+                    // Get a list of all the roles
+                    String[] roleNames = new String[roleManager.playableRoles.size()];
+                    String[] roleDescriptions = new String[roleManager.playableRoles.size()];
+                    for (int i = 0; i < roleManager.playableRoles.size(); i++) {
+                        GameRole role = roleManager.playableRoles.get(i);
+                        roleNames[i] = role.name;
+                        roleDescriptions[i] = role.description;
+                    }
+
+                    state = GameState.ACTIVE;
+                    lastGameStateChange = new Instant();
+
+                    display.showActiveGame(roleManager.getAllPlayers(), roleNames, roleDescriptions);
+                } else {
+                    List<Long> playersNotReady = roleManager.getPlayersWithoutRoles();
+                    List<Long> allPlayers = roleManager.getAllPlayers();
+                    allPlayers.removeAll(playersNotReady);
+                    display.showReadyUp(allPlayers, playersNotReady);
+                }
+            }
+        }
     }
 
     public void redisplayGame() {
         display.reshowDisplay(GameState.ACTIVE);
     }
-    
+
     public void endGame() {
         display.showGameEnded();
     }
 
-    public void startGame() {
-        try {
-            data.moveToPregame();
-
-            List<Long> playersNotReady = data.getPlayersWithoutRoles();
-            List<Long> allPlayers = data.getAllPlayers();
-            allPlayers.removeAll(playersNotReady);
-            display.showReadyUp(allPlayers, playersNotReady);
-        } catch (GeneralGameException ex) {
-            Logger.getLogger(GameController.class.getName()).log(Level.SEVERE, null, ex);
-        }
+    public Instant getLastGameStateChangeTime() {
+        return lastGameStateChange;
     }
 
-    public void restartGame() {
-        data.resetGame();
-
-        String[] roleNames = new String[data.playableRoles.size()];
-        String[] roleDescriptions = new String[data.playableRoles.size()];
-        for (int i = 0; i < data.playableRoles.size(); i++) {
-            GameRole role = data.playableRoles.get(i);
-            roleNames[i] = role.name;
-            roleDescriptions[i] = role.description;
-        }
-
-        display.showStart(data.getAllPlayers(), roleNames, roleDescriptions);
+    public List<Long> getAllPlayers() {
+        return roleManager.getAllPlayers();
     }
 
-    public void readyUp(Long user, GameRole chosenRole) {
-        if (chosenRole != null) {
-            try {
-                // Try to start the game
-                if (data.attemptGameStartWithRoleAssignment(user, chosenRole)) {
-                    // Game has started, distribute non default roles
-                    data.distributeNonDefaultRoles();
+    public boolean hasPlayer(Long userID) {
+        return roleManager.getAllPlayers().contains(userID);
+    }
 
-                    // Send role assignment message for non default roles and send everyone a game starting message
-                    data.getAllPlayers().forEach(playerID -> {
-                        data.getRolesForPlayer(playerID).stream().filter(role -> (!role.isDefault)).forEachOrdered(role -> {
-                            display.showPlayerMessage(playerID, role.assignmentMessage);
-                        });
-                    });
+    public void addPlayer(Long userID) {
+        roleManager.addPlayer(userID);
+    }
 
-                    String[] roleNames = new String[data.playableRoles.size()];
-                    String[] roleDescriptions = new String[data.playableRoles.size()];
-                    for (int i = 0; i < data.playableRoles.size(); i++) {
-                        GameRole role = data.playableRoles.get(i);
-                        roleNames[i] = role.name;
-                        roleDescriptions[i] = role.description;
-                    }
+    public boolean removePlayer(Long userID) {
+        return roleManager.removePlayer(userID);
+    }
 
-                    display.showActiveGame(data.getAllPlayers(), roleNames, roleDescriptions);
-                } else {
-                    List<Long> playersNotReady = data.getPlayersWithoutRoles();
-                    List<Long> allPlayers = data.getAllPlayers();
-                    allPlayers.removeAll(playersNotReady);
-                    display.showReadyUp(allPlayers, playersNotReady);
-                }
-            } catch (GeneralGameException ex) {
-                Logger.getLogger(CommandListener.class.getName()).log(Level.SEVERE, ex.getMessage(), ex);
+    public void addRole(GameRole role) {
+        roleManager.addRole(role);
+    }
 
-            }
-        }
+    public void removeRole(GameRole role) {
+        roleManager.removeRole(role);
     }
 
     public boolean useVeto(Long userID) {
         if (!vetoUsed) {
-            for (GameRole role : data.getRolesForPlayer(userID)) {
+            for (GameRole role : roleManager.getRolesForPlayer(userID)) {
                 if (role.id == 3) {
                     vetoUsed = true;
                     return true;
@@ -159,7 +174,7 @@ public class GameController<T extends GameDisplay> {
 
     public boolean useExecute(Long userID, String nameToExecute) {
         if (!executeUsed) {
-            for (GameRole role : data.getRolesForPlayer(userID)) {
+            for (GameRole role : roleManager.getRolesForPlayer(userID)) {
                 if (role.id == 4) {
                     executeUsed = true;
                     return true;
@@ -172,7 +187,7 @@ public class GameController<T extends GameDisplay> {
 
     public boolean useDetect(Long userID, Long userToDetect, GameRole roleToDetect) {
         if (!detectUsed) {
-            for (GameRole role : data.getRolesForPlayer(userID)) {
+            for (GameRole role : roleManager.getRolesForPlayer(userID)) {
                 if (role.id == 7) {
                     detectUsed = true;
                     return true;
@@ -188,6 +203,6 @@ public class GameController<T extends GameDisplay> {
     }
 
     public GameState getState() {
-        return data.getState();
+        return state;
     }
 }
